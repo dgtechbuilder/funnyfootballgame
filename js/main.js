@@ -31,7 +31,7 @@ const App = {
     window.addEventListener('resize', rs); rs();
     this.cv.addEventListener('pointerdown', () => { SFX.init(); this.cv.focus(); });
     try {
-      const s = JSON.parse(localStorage.getItem('jollofcup') || 'null');
+      const s = JSON.parse(localStorage.getItem('monatecup') || localStorage.getItem('jollofcup') || 'null');
       if (s) { Object.assign(this.cfg, s.cfg || {}); Object.assign(this.opts, s.opts || {}); }
     } catch (e) { /* storage unavailable */ }
     if (!CAPTAINS.some(c => c.id === this.cfg.capL)) this.cfg.capL = DEFAULT_CFG.capL;
@@ -54,7 +54,7 @@ const App = {
     };
     requestAnimationFrame(frame);
   },
-  save() { try { localStorage.setItem('jollofcup', JSON.stringify({ cfg: this.cfg, opts: this.opts })); } catch (e) { /* ignore */ } },
+  save() { try { localStorage.setItem('monatecup', JSON.stringify({ cfg: this.cfg, opts: this.opts })); } catch (e) { /* ignore */ } },
   toast(msg, color = '#fff') { this.toasts.push({ msg, color, t: 0 }); if (this.toasts.length > 4) this.toasts.shift(); },
 
   startDemo() {
@@ -373,7 +373,7 @@ const App = {
       c.restore();
       lx += w;
     }
-    drawEmoji(c, '🍛', x + tw / 2 + size * 0.45, y - size * 0.1 + Math.sin(this.t * 5) * 6, size * 0.75, false, Math.sin(this.t * 3) * 0.2);
+    drawEmoji(c, '🏆', x + tw / 2 + size * 0.45, y - size * 0.1 + Math.sin(this.t * 5) * 6, size * 0.75, false, Math.sin(this.t * 3) * 0.2);
     drawEmoji(c, '⚽', x - tw / 2 - size * 0.45, y - size * 0.1, size * 0.65, false, this.t * 3);
   },
 
@@ -386,6 +386,7 @@ const App = {
     // kente strip
     const ks = ['#fcd116', '#1b8a3c', '#e8433a', '#111'];
     for (let i = 0; i < 40; i++) { c.fillStyle = ks[i % 4]; c.fillRect(W / 2 - 300 * u + i * 15 * u, H * 0.24 + 108 * u, 15 * u, 7 * u); }
+    text(c, GAME_MEANING, W / 2, H * 0.24 + 132 * u, 15 * u, '#ffe066', 'center', '#000', 3, FONT_UI);
     const items = this.titleItems();
     const bw = Math.min(W - 40, 380 * u), bh = 58 * u;
     items.forEach(([label, fn], i) => {
@@ -531,7 +532,7 @@ const App = {
       if (col < 2) this.button(c, bx + bw + 6 * u, y + 4 * u, 28 * u, 30 * u, '▶', () => { this.sides[id] = Math.min(1, this.sides[id] + 1); SFX.ui(); }, { size: 14 * u });
     });
     const nL = devs.filter(id => this.sides[id] < 0).length, nR = devs.filter(id => this.sides[id] > 0).length;
-    const mode = !nL && !nR ? 'CPU vs CPU: sit back and enjoy the wahala' : (nL && nR ? 'VERSUS! May the best jollof win.' : (nL + nR > 1 ? 'CO-OP vs CPU!' : 'YOU vs CPU'));
+    const mode = !nL && !nR ? 'CPU vs CPU: sit back and enjoy the wahala' : (nL && nR ? 'VERSUS! May the best team win.' : (nL + nR > 1 ? 'CO-OP vs CPU!' : 'YOU vs CPU'));
     text(c, mode, W / 2, top + h + 22 * u, 20 * u, '#7CFC00', 'center', '#000', 4 * u);
     const bw2 = 230 * u;
     this.button(c, W / 2 - bw2 - 8 * u, top + h + 42 * u, bw2, 34 * u, '🎮 CONTROLLER SETUP', () => { this.padsReturn = 'join'; this.go('pads'); }, { size: 15 * u });
@@ -668,7 +669,7 @@ const App = {
     c.fillStyle = 'rgba(5,6,20,0.72)'; c.fillRect(0, 0, W, H);
     this.hit(0, 0, W, H, null);
     text(c, 'PAUSED', W / 2, H * 0.22, 80 * u, '#ffe066', 'center', '#000', 10 * u);
-    text(c, 'The players are using this time to eat jollof.', W / 2, H * 0.22 + 56 * u, 18 * u, '#fff', 'center', '#000', 3);
+    text(c, 'The players are using this time to buy suya.', W / 2, H * 0.22 + 56 * u, 18 * u, '#fff', 'center', '#000', 3);
     const w = 360 * u, h = 50 * u;
     this.pauseItems().forEach(([s, fn], i) => {
       const y = H * 0.4 + i * (h + 12 * u);
@@ -689,7 +690,7 @@ const App = {
     }
     const [A, B] = R.teams;
     const win = R.winner;
-    text(c, win ? `${win.name.toUpperCase()} WIN!` : 'IT\'S A DRAW! EVERYBODY GETS JOLLOF!', W / 2, 56 * u, Math.min(50 * u, W / 18), '#ffe066', 'center', '#000', 8 * u);
+    text(c, win ? `${win.name.toUpperCase()} WIN!` : 'IT\'S A DRAW! EVERYBODY HAD FUN!', W / 2, 56 * u, Math.min(50 * u, W / 18), '#ffe066', 'center', '#000', 8 * u);
     for (const [t, sd] of [[A, -1], [B, 1]]) {
       const x = W / 2 + sd * Math.min(W * 0.3, 330 * u), y = H * 0.5;
       const won = win === t, lost = win && win !== t;

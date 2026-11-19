@@ -119,14 +119,11 @@ function drawEyes(c, P, fx, fy, expr, ox = 0, oy = 0) {
     return;
   }
   if (expr === 'panic') {
-    for (const s of [-1, 1]) {
-      ellipse(c, ex + s * 5.5, ey, 4.4, 5.2, '#fff', '#222', 1);
-      circle(c, ex + s * 5.5 + px, ey + py, 1.3, '#111');
-    }
+    for (const s of [-1, 1]) { ellipse(c, ex + s * 5.5, ey, 4.4, 5.2, '#fff', '#222', 1); circle(c, ex + s * 5.5 + px, ey + py, 1.3, '#111'); }
   } else {
     for (const s of [-1, 1]) {
-      ellipse(c, ex + s * 5.5 + px * 0.4, ey, 2.3, 3.5, '#111');
-      circle(c, ex + s * 5.5 + px * 0.4 - 0.7, ey - 1.4, 0.95, '#fff');
+      ellipse(c, ex + s * 5.2 + px * 0.4, ey, 2.1, 3.3, '#111');
+      circle(c, ex + s * 5.2 + px * 0.4 - 0.6, ey - 1.3, 0.8, 'rgba(255,255,255,0.85)');
     }
   }
   if (expr === 'grit' || expr === 'angry') {
@@ -146,17 +143,21 @@ function drawMouth(c, P, fx, fy, expr, oy = 0) {
     c.beginPath(); c.arc(mx, my - 1, 5, 0.1, Math.PI - 0.1); c.closePath(); c.fillStyle = '#5a1010'; c.fill();
     ellipse(c, mx, my + 2.2, 2.4, 1.3, '#ff7a8a');
   } else {
-    c.strokeStyle = '#3a1a0a'; c.lineWidth = 1.8;
-    c.beginPath(); c.arc(mx, my - 2.5, 4, 0.35, Math.PI - 0.35); c.stroke();
+    c.strokeStyle = '#111'; c.lineWidth = 1.7;
+    c.beginPath(); c.arc(mx, my - 4, 5.5, 0.45, Math.PI - 0.45); c.stroke();
   }
 }
 
+// Rounded-block head shared by every character (a softened Roblox-style head)
+const HEAD_W = 30, HEAD_H = 27, HEAD_R = 10;
+function headPath(c, grow = 0) { rrect(c, -HEAD_W / 2 - grow, -HEAD_H / 2 - grow, HEAD_W + grow * 2, HEAD_H + grow * 2, HEAD_R + grow); }
+function hairCap(c, col, depth) { c.fillStyle = col; rrect(c, -HEAD_W / 2 - 1, -HEAD_H / 2 - 2, HEAD_W + 2, depth + 2, HEAD_R); c.fill(); }
 // Each look: behind(c,P,fx,fy,back,t) drawn before head; front(...) after head & face.
 const LOOKS = {
   dayo: { // Lagos danfo driver: flat cap, dark shades, conductor's towel
     bodyW: 1.35, headR: 16, hideEyes: true,
     front(c, P, fx, fy, back, t, o) {
-      c.fillStyle = P('#1c1c1c'); c.beginPath(); c.arc(0, -4, 16.5, Math.PI * 1.02, Math.PI * 1.98); c.fill();
+      hairCap(c, P('#1c1c1c'), 11);
       if (!back) { ellipse(c, fx * 9, -10, 13, 4, P('#111')); }
       if (!back && o.expr !== 'hurt') {
         c.fillStyle = P('#0d0d0d'); rrect(c, fx * 5.5 - 12, -5, 24, 7, 2.5); c.fill();
@@ -169,7 +170,7 @@ const LOOKS = {
   kip: { // Kenyan marathoner: short hair, sweatband, neon spikes
     bodyW: 0.92, headR: 15, runner: true,
     front(c, P, fx, fy, back, t, o) {
-      c.fillStyle = P('#141414'); c.beginPath(); c.arc(0, -2, 15.6, Math.PI * 1.05, Math.PI * 1.95); c.fill();
+      hairCap(c, P('#141414'), 8);
       c.fillStyle = P('#ffffff'); c.fillRect(-15.5, -10, 31, 5);
       c.fillStyle = P('#006600'); c.fillRect(-15.5, -8, 31, 1.4);
       if (back) { c.fillStyle = P('#ffffff'); c.beginPath(); c.moveTo(0, -8); c.lineTo(-6, 4); c.lineTo(-2, 4); c.fill(); }
@@ -194,7 +195,7 @@ const LOOKS = {
   hamada: { // Egyptian koshary king: red fez, mighty moustache, belly
     bodyW: 1.45, headR: 16.5, belly: true, mouthOffset: 3,
     front(c, P, fx, fy, back, t, o) {
-      c.fillStyle = P('#6d6d6d'); c.beginPath(); c.arc(0, -2, 16.8, Math.PI * 1.0, Math.PI * 1.2); c.arc(0, -2, 16.8, Math.PI * 1.8, Math.PI * 2.0); c.fill();
+      c.fillStyle = P('#6d6d6d'); rrect(c, -16, -9, 4, 10, 2); c.fill(); rrect(c, 12, -9, 4, 10, 2); c.fill();
       c.fillStyle = P('#c8102e'); c.beginPath(); c.moveTo(-11, -12); c.lineTo(-8, -32); c.lineTo(8, -32); c.lineTo(11, -12); c.closePath(); c.fill();
       c.fillStyle = P('#8a0a1f'); c.fillRect(-11, -15, 22, 3);
       const sw = Math.sin(t * 7) * 3;
@@ -263,11 +264,11 @@ const LOOKS = {
 
 const SIDEKICK_HATS = {
   flatcap(c, P, fx, fy, back) {
-    c.fillStyle = P('#2b2b2b'); c.beginPath(); c.arc(0, -4, 15.5, Math.PI * 1.02, Math.PI * 1.98); c.fill();
+    hairCap(c, P('#2b2b2b'), 10);
     if (!back) ellipse(c, fx * 8, -10, 11, 3.5, P('#1a1a1a'));
   },
   headband(c, P, fx, fy, back, o) {
-    c.fillStyle = P('#141414'); c.beginPath(); c.arc(0, -2, 15, Math.PI, TAU); c.fill();
+    hairCap(c, P('#141414'), 8);
     c.fillStyle = P(o.kit2); c.fillRect(-15, -11, 30, 5);
     if (back) { c.beginPath(); c.moveTo(0, -9); c.lineTo(-7, 2); c.lineTo(-3, 2); c.fill(); }
   },
@@ -300,19 +301,19 @@ const SIDEKICK_HATS = {
   },
 };
 
-function drawSkeleton(c, o, headR) {
-  // black blocky silhouette w/ glowing bones (electrocution gag)
+function drawSkeleton(c, o) {
+  // black silhouette w/ glowing bones (electrocution gag)
   c.fillStyle = '#111';
-  c.fillRect(-10, -17, 20, 17); c.fillRect(-11, -36, 22, 20); c.fillRect(-19, -36, 7, 19); c.fillRect(12, -36, 7, 19);
-  rrect(c, -headR, -61, headR * 2, 25, 9); c.fill();
+  rrect(c, -13, -38, 26, 24, 6); c.fill(); rrect(c, -12, -15, 24, 15, 4); c.fill();
+  rrect(c, -22, -37, 8, 22, 4); c.fill(); rrect(c, 14, -37, 8, 22, 4); c.fill();
+  c.save(); c.translate(0, -51); headPath(c); c.fill(); c.restore();
   c.strokeStyle = '#fffbe0'; c.lineWidth = 2.4; c.lineCap = 'round';
-  c.beginPath(); c.moveTo(0, -34); c.lineTo(0, -17); c.stroke();
-  for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(-7, -31 + i * 5); c.quadraticCurveTo(0, -28 + i * 5, 7, -31 + i * 5); c.stroke(); }
-  c.beginPath(); c.moveTo(-5, -16); c.lineTo(-5, -1); c.moveTo(5, -16); c.lineTo(5, -1); c.stroke();
-  c.beginPath(); c.moveTo(-15.5, -34); c.lineTo(-15.5, -19); c.moveTo(15.5, -34); c.lineTo(15.5, -19); c.stroke();
-  rrect(c, -headR * 0.68, -57, headR * 1.36, 17, 6); c.fillStyle = '#fffbe0'; c.fill();
-  circle(c, -4, -50, 2.6, '#111'); circle(c, 4, -50, 2.6, '#111');
-  c.fillStyle = '#111'; c.fillRect(-4, -44, 8, 1.6);
+  c.beginPath(); c.moveTo(0, -37); c.lineTo(0, -14); c.stroke();
+  for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(-9, -33 + i * 6); c.quadraticCurveTo(0, -30 + i * 6, 9, -33 + i * 6); c.stroke(); }
+  c.beginPath(); c.moveTo(-6, -14); c.lineTo(-6, 0); c.moveTo(6, -14); c.lineTo(6, 0); c.moveTo(-18, -34); c.lineTo(-18, -17); c.moveTo(18, -34); c.lineTo(18, -17); c.stroke();
+  c.fillStyle = '#fffbe0'; c.save(); c.translate(0, -51); c.scale(0.7, 0.72); headPath(c); c.fill(); c.restore();
+  circle(c, -4, -53, 2.6, '#111'); circle(c, 4, -53, 2.6, '#111');
+  c.fillStyle = '#111'; c.fillRect(-4, -46, 8, 1.6);
 }
 
 // ---------------------------------------------------------------------------
@@ -443,12 +444,12 @@ function rbFaceSpace(c, o, u, v, w, h) {
   c.transform((_rbX[u] - _rbX[o]) / w, (_rbY[u] - _rbY[o]) / w, (_rbX[v] - _rbX[o]) / h, (_rbY[v] - _rbY[o]) / h, _rbX[o], _rbY[o]);
 }
 
-// Rounded-cylinder head, Roblox style, lit from the upper left.
-function rbHead(c, skin, R) {
-  const w = R * 0.98, h = R * 0.9, r = R * 0.52;
-  rrect(c, -w, -h, w * 2, h * 2, r); c.fillStyle = shade(skin, -0.22); c.fill();
+// Shared rounded-block head (HEAD_W x HEAD_H, see headPath), lit from the upper left.
+function rbHead(c, skin) {
+  const w = HEAD_W / 2, h = HEAD_H / 2;
+  headPath(c); c.fillStyle = shade(skin, -0.22); c.fill();
   c.strokeStyle = RB_EDGE; c.lineWidth = 1.3; c.stroke();
-  rrect(c, -w + 1.2, -h + 1.2, w * 2 - 6.5, h * 2 - 2.4, r * 0.9); c.fillStyle = skin; c.fill();
+  rrect(c, -w + 1.2, -h + 1.2, HEAD_W - 6.5, HEAD_H - 2.4, HEAD_R - 1); c.fillStyle = skin; c.fill();
   ellipse(c, -1.8, -h + 4.6, w - 4.5, 3.4, shade(skin, 0.13));
 }
 
@@ -460,7 +461,6 @@ function drawCharacter(c, o, x, y, s) {
   const t = o.anim;
   const ph = t * 15;
   const bob = (Math.abs(Math.sin(ph)) * 2.6 * run) + (o.dance ? Math.abs(Math.sin(t * 9)) * 5 : 0) + (o.armsUp ? Math.abs(Math.sin(t * 10)) * 8 : 0);
-  const headR = look ? look.headR : (keeper ? 15.5 : 14.5);
   const bw = look ? look.bodyW : (keeper ? 1.15 : 1.0);
   const P = col => tintCol(col, o.tint);
 
@@ -484,7 +484,7 @@ function drawCharacter(c, o, x, y, s) {
   c.scale(sx, sy);
   c.lineJoin = 'round';
 
-  if (o.tint === 'zap' && Math.floor(t * 18) % 2 === 0) { drawSkeleton(c, o, headR); c.restore(); return; }
+  if (o.tint === 'zap' && Math.floor(t * 18) % 2 === 0) { drawSkeleton(c, o); c.restore(); return; }
 
   // ---- palette
   const skin = P(o.skin);
@@ -564,9 +564,9 @@ function drawCharacter(c, o, x, y, s) {
 
   // ---- head (2D rounded cylinder; hats and faces are drawn on it as before)
   c.save();
-  c.translate(sa * 1.5, -(SH + headR * 0.83) - bob);
+  c.translate(sa * 1.5, -(SH + HEAD_H / 2 - 1) - bob);
   if (look && look.behind) look.behind(c, P, vfx, fy, back, t, o);
-  rbHead(c, skin, headR);
+  rbHead(c, skin);
   if (!back) {
     if (!(look && look.hideEyes && o.expr !== 'hurt')) drawEyes(c, P, vfx, fy, o.expr);
     drawMouth(c, P, vfx, fy, o.expr, look && look.mouthOffset ? look.mouthOffset : 0);
@@ -574,8 +574,8 @@ function drawCharacter(c, o, x, y, s) {
   if (look && look.front) look.front(c, P, vfx, fy, back, t, o);
   if (!look && o.role === 'sidekick' && SIDEKICK_HATS[o.hat]) SIDEKICK_HATS[o.hat](c, P, vfx, fy, back, o);
   if (keeper) {
-    c.fillStyle = P(o.kit); c.beginPath(); c.arc(0, -3, 15.5, Math.PI, TAU); c.fill();
-    c.fillStyle = P(shade(o.kit, -0.3)); c.beginPath(); c.ellipse(vfx * 10, -4, 9 * Math.max(0.3, Math.abs(vfx)), 3, 0, 0, TAU); c.fill();
+    hairCap(c, P(o.kit), 10);
+    c.fillStyle = P(shade(o.kit, -0.3)); c.beginPath(); c.ellipse(vfx * 11, -4, 9 * Math.max(0.3, Math.abs(vfx)), 3, 0, 0, TAU); c.fill();
   }
   c.restore();
   if (raised) drawArm(nearSide);
