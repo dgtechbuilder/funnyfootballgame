@@ -3,9 +3,21 @@
 // ============================================================================
 
 let VW = 1280, VH = 720, CZ = 1, CX = 0, CY = 0, SHX = 0, SHY = 0;
-function PX(x, z = 0) { const dx = (x - CX) * CZ; return VW / 2 + dx + z * CZ * (dx / VW) * 0.55 + SHX; }
-function PY(y, z = 0) { return VH / 2 + 30 + (y - CY) * CZ * TILT - z * CZ + SHY; }
-function P3(x, y, z) { return [PX(x, z), PY(y, z)]; }
+// Perspective camera: placed low and behind the near touchline, looking across the pitch from the side.
+// DK(y) = depth scale (far side smaller), GT(y) = how squashed a ground circle looks at that depth.
+const CAM_D = 2000, CAM_H = 900;
+let HY = 0;
+function DK(y) { return CAM_D / Math.max(500, CAM_D + CY - y); }
+function GT(y) { return CAM_H / Math.max(500, CAM_D + CY - y); }
+function KZ(y) { return CZ * DK(y); }
+function PX(x, y, z = 0) { return VW / 2 + (x - CX) * CZ * DK(y) + SHX; }
+function PY(y, z = 0) { return HY + (CAM_H - z) * CZ * DK(y) + SHY; }
+function P3(x, y, z = 0) { return [PX(x, y, z), PY(y, z)]; }
+function groundPath(c, cx, cy, rad, a0 = 0, a1 = TAU, n = 40) {
+  c.beginPath();
+  for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; const [x, y] = P3(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, 0); i ? c.lineTo(x, y) : c.moveTo(x, y); }
+}
+function groundEllipse(c, x, y, r, fill, stroke, lw) { ellipse(c, PX(x, y), PY(y), r * KZ(y), r * KZ(y) * GT(y), fill, stroke, lw); }
 function quad(c, pts, fillStyle, strokeStyle, lw) {
   c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]); c.closePath();
   if (fillStyle) { c.fillStyle = fillStyle; c.fill(); }
@@ -24,6 +36,7 @@ function renderMatch(c) {
   const S = M.stadium;
   VW = App.W; VH = App.H; CZ = M.cam.zoom; CX = M.cam.x; CY = M.cam.y;
   SHX = (Math.random() - 0.5) * M.shake * 1.6; SHY = (Math.random() - 0.5) * M.shake * 1.6;
+  HY = VH / 2 + 60 - CAM_H * CZ;
 
   // sky
   const g = c.createLinearGradient(0, 0, 0, VH);
@@ -37,19 +50,19 @@ function renderMatch(c) {
   if (S.id === 'goma') {
     // glowing volcano silhouette
     const vy = PY(-330, 300);
-    c.fillStyle = '#2b0d06'; c.beginPath(); c.moveTo(PX(FW * 0.2), vy + 200); c.lineTo(PX(FW * 0.45), vy - 40); c.lineTo(PX(FW * 0.55), vy - 40); c.lineTo(PX(FW * 0.8), vy + 200); c.fill();
-    const lg = c.createRadialGradient(PX(FW / 2), vy - 40, 5, PX(FW / 2), vy - 40, 160 * CZ);
+    c.fillStyle = '#2b0d06'; c.beginPath(); c.moveTo(PX(FW * 0.2, -330), vy + 200); c.lineTo(PX(FW * 0.45, -330), vy - 40); c.lineTo(PX(FW * 0.55, -330), vy - 40); c.lineTo(PX(FW * 0.8, -330), vy + 200); c.fill();
+    const lg = c.createRadialGradient(PX(FW / 2, -330), vy - 40, 5, PX(FW / 2, -330), vy - 40, 160 * CZ);
     lg.addColorStop(0, 'rgba(255,140,0,0.8)'); lg.addColorStop(1, 'rgba(255,60,0,0)');
     c.fillStyle = lg; c.fillRect(0, 0, VW, VH);
   }
   if (S.id === 'afronaut') {
     // rocket on the launchpad
-    const rx = PX(FW * 0.18, 0), ry = PY(-420, 200);
+    const rx = PX(FW * 0.18, -420), ry = PY(-420, 200);
     c.fillStyle = '#e8e8f0'; rrect(c, rx - 14 * CZ, ry - 90 * CZ, 28 * CZ, 90 * CZ, 12 * CZ); c.fill();
     c.fillStyle = '#198a00'; c.fillRect(rx - 14 * CZ, ry - 50 * CZ, 28 * CZ, 8 * CZ); c.fillStyle = '#ef7d00'; c.fillRect(rx - 14 * CZ, ry - 42 * CZ, 28 * CZ, 8 * CZ);
     c.fillStyle = '#de2010'; c.beginPath(); c.moveTo(rx - 14 * CZ, ry - 80 * CZ); c.lineTo(rx, ry - 115 * CZ); c.lineTo(rx + 14 * CZ, ry - 80 * CZ); c.fill();
     // planet
-    const px = PX(FW * 0.78, 0), py = PY(-500, 200);
+    const px = PX(FW * 0.78, -500), py = PY(-500, 200);
     circle(c, px, py, 120 * CZ, '#6b4cc9'); c.save(); c.beginPath(); c.arc(px, py, 120 * CZ, 0, TAU); c.clip();
     circle(c, px + 40 * CZ, py - 30 * CZ, 120 * CZ, '#8a6ff0'); c.restore();
     c.strokeStyle = 'rgba(200,180,255,0.6)'; c.lineWidth = 6 * CZ; c.beginPath(); c.ellipse(px, py, 190 * CZ, 34 * CZ, -0.25, 0, TAU); c.stroke();
@@ -95,15 +108,15 @@ function renderMatch(c) {
   // ground decals & hazards
   for (const d of M.decals) {
     const a = Math.min(1, d.life / 2) * 0.55;
-    ellipse(c, PX(d.x), PY(d.y), d.r * CZ, d.r * CZ * TILT, `rgba(20,15,10,${a})`);
+    groundEllipse(c, d.x, d.y, d.r, `rgba(20,15,10,${a})`);
   }
   for (const h of M.hazards) {
-    if (h.type === 'banana') drawEmoji(c, '🍌', PX(h.x), PY(h.y, 6), 34 * CZ, false, h.rot);
+    if (h.type === 'banana') drawEmoji(c, '🍌', PX(h.x, h.y), PY(h.y, 6), 34 * KZ(h.y), false, h.rot);
     if (h.type === 'strike') {
       const prog = 1 - h.T / h.T0, pulse = 0.5 + 0.5 * Math.sin(M.time * 20);
-      ellipse(c, PX(h.x), PY(h.y), h.r * CZ, h.r * CZ * TILT, `rgba(255,${h.kind === 'meteor' ? 80 : 230},40,${0.12 + 0.12 * pulse})`, `rgba(255,${h.kind === 'meteor' ? 60 : 255},60,0.9)`, 3 * CZ);
-      ellipse(c, PX(h.x), PY(h.y), h.r * CZ * prog, h.r * CZ * TILT * prog, 'rgba(255,40,40,0.25)');
-      text(c, '!', PX(h.x), PY(h.y), 34 * CZ, '#ffeb3b', 'center', '#b00', 4);
+      groundEllipse(c, h.x, h.y, h.r, `rgba(255,${h.kind === 'meteor' ? 80 : 230},40,${0.12 + 0.12 * pulse})`, `rgba(255,${h.kind === 'meteor' ? 60 : 255},60,0.9)`, 3 * CZ);
+      groundEllipse(c, h.x, h.y, h.r * prog, 'rgba(255,40,40,0.25)');
+      text(c, '!', PX(h.x, h.y), PY(h.y), 34 * KZ(h.y), '#ffeb3b', 'center', '#b00', 4);
     }
   }
 
@@ -112,22 +125,22 @@ function renderMatch(c) {
   for (const p of M.all) {
     if (p.hidden) continue;
     const a = 0.3 * clamp(1 - p.z / 300, 0.2, 1);
-    ellipse(c, PX(p.x), PY(p.y), p.r * CZ * 1.05, p.r * CZ * 0.45, `rgba(0,0,0,${a})`);
+    groundEllipse(c, p.x, p.y, p.r * 1.1, `rgba(0,0,0,${a})`);
     if (p.human && p.humanH) {
       const col = p.humanH.color;
       c.strokeStyle = col; c.lineWidth = 3 * CZ;
-      c.beginPath(); c.ellipse(PX(p.x), PY(p.y), p.r * CZ * 1.35, p.r * CZ * 0.6, 0, 0, TAU); c.stroke();
+      c.beginPath(); c.ellipse(PX(p.x, p.y), PY(p.y), p.r * KZ(p.y) * 1.4, p.r * KZ(p.y) * 1.4 * GT(p.y), 0, 0, TAU); c.stroke();
     }
     if (p.charging) drawChargeRing(c, p);
   }
-  for (const bx of M.boxes) ellipse(c, PX(bx.x), PY(bx.y), 20 * CZ * clamp(1 - bx.z / 900, 0.3, 1), 8 * CZ, 'rgba(0,0,0,0.3)');
+  for (const bx of M.boxes) groundEllipse(c, bx.x, bx.y, 20 * clamp(1 - bx.z / 900, 0.3, 1), 'rgba(0,0,0,0.3)');
   {
     const sz = BALL_R * (b.super ? (SUPER_SIZE[b.super.type] || 1) : 1);
     const k = clamp(1 - b.z / 400, 0.25, 1);
-    ellipse(c, PX(b.x), PY(b.y), sz * CZ * k * 1.1, sz * CZ * k * 0.5, 'rgba(0,0,0,0.35)');
-    if (b.super && b.super.type === 'split') for (const d of b.super.decoys) ellipse(c, PX(d.x), PY(d.y), sz * CZ, sz * CZ * 0.5, 'rgba(0,0,0,0.3)');
+    groundEllipse(c, b.x, b.y, sz * k * 1.1, 'rgba(0,0,0,0.35)');
+    if (b.super && b.super.type === 'split') for (const d of b.super.decoys) groundEllipse(c, d.x, d.y, sz, 'rgba(0,0,0,0.3)');
   }
-  for (const q of M.projectiles) ellipse(c, PX(q.x), PY(q.y), 14 * CZ, 6 * CZ, 'rgba(0,0,0,0.25)');
+  for (const q of M.projectiles) groundEllipse(c, q.x, q.y, 14, 'rgba(0,0,0,0.25)');
 
   // ball trail (under sprites)
   drawBallTrail(c);
@@ -139,8 +152,9 @@ function renderMatch(c) {
   for (const bx of M.boxes) D.push({ y: bx.y, f: () => drawBox(c, bx) });
   for (const q of M.projectiles) D.push({ y: q.y, f: () => drawProjectile(c, q) });
   for (const h of M.hazards) {
-    if (h.type === 'animal') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x), PY(h.y, h.r * 1.0 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), h.r * 2.5 * CZ, !h.flip) });
-    if (h.type === 'penguin') D.push({ y: h.y, f: () => drawEmoji(c, '🐧', PX(h.x), PY(h.y, 18), 46 * CZ, false, h.vy > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) });
+    if (h.type === 'animal') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x, h.y), PY(h.y, h.r * 1.0 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), h.r * 2.5 * KZ(h.y), !h.flip) });
+    if (h.type === 'stampede') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x, h.y), PY(h.y, 30 + Math.abs(Math.sin(h.t * 14)) * 10), 70 * KZ(h.y), h.vx > 0) });
+    if (h.type === 'penguin') D.push({ y: h.y, f: () => drawEmoji(c, '🐧', PX(h.x, h.y), PY(h.y, 18), 46 * KZ(h.y), false, h.vy > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) });
   }
   D.push({ y: GY1, f: () => { drawGoalFront(c, 0); drawGoalFront(c, 1); } });
   D.sort((a, q) => a.y - q.y);
@@ -154,8 +168,8 @@ function renderMatch(c) {
   // falling meteors / storm clouds
   for (const h of M.hazards) if (h.type === 'strike') {
     const prog = 1 - h.T / h.T0;
-    if (h.kind === 'meteor') { const z = (1 - prog) * 900; drawEmoji(c, '☄️', PX(h.x + (1 - prog) * 200, z), PY(h.y, z), (40 + prog * 50) * CZ, true, -0.6); }
-    else drawEmoji(c, '🌩️', PX(h.x, 380), PY(h.y, 380), 90 * CZ);
+    if (h.kind === 'meteor') { const z = (1 - prog) * 900; drawEmoji(c, '☄️', PX(h.x + (1 - prog) * 200, h.y, z), PY(h.y, z), (40 + prog * 50) * KZ(h.y), true, -0.6); }
+    else drawEmoji(c, '🌩️', PX(h.x, h.y, 380), PY(h.y, 380), 90 * KZ(h.y));
   }
 
   // overhead labels (bubbles, player tags) on top of everything
@@ -165,8 +179,8 @@ function renderMatch(c) {
     const a = Math.min(1, M.blackout * 2, (4.5 - M.blackout) * 4) * 0.86;
     c.save(); c.globalAlpha = a; c.fillStyle = '#02030a'; c.fillRect(0, 0, VW, VH); c.restore();
     c.save(); c.globalCompositeOperation = 'lighter';
-    for (const p of M.all) if (!p.hidden) { const x = PX(p.x), y = PY(p.y) - 28 * CZ; ellipse(c, x, y + 10 * CZ, 10 * CZ, 4 * CZ, 'rgba(255,255,255,0.5)'); circle(c, x - 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); circle(c, x + 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); }
-    circle(c, PX(M.ball.x, M.ball.z), PY(M.ball.y, M.ball.z) - BALL_R * CZ, BALL_R * CZ * 1.4, 'rgba(255,255,160,0.8)');
+    for (const p of M.all) if (!p.hidden) { const x = PX(p.x, p.y), y = PY(p.y) - 28 * CZ; ellipse(c, x, y + 10 * CZ, 10 * CZ, 4 * CZ, 'rgba(255,255,255,0.5)'); circle(c, x - 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); circle(c, x + 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); }
+    circle(c, PX(M.ball.x, M.ball.y, M.ball.z), PY(M.ball.y, M.ball.z) - BALL_R * CZ, BALL_R * CZ * 1.4, 'rgba(255,255,160,0.8)');
     c.restore();
     text(c, '💡 NEPA TOOK LIGHT! 💡', VW / 2, VH * 0.22, 28 * Math.min(VW / 1280, VH / 720), '#ffe066', 'center', '#000', 5);
   }
@@ -197,13 +211,16 @@ function drawStands(c) {
     const x0 = sd < 0 ? -GOAL_D - 40 : FW + GOAL_D + 40, x1 = sd < 0 ? -GOAL_D - 240 : FW + GOAL_D + 240;
     quad(c, [P3(x0, -20, WALL_H), P3(x0, FH + 60, WALL_H), P3(x1, FH + 60, 150), P3(x1, -20, 150)], shade(S.wallDark, -0.4));
   }
-  // crowd
+  drawCrowd(c, false);
+}
+function drawCrowd(c, near) {
   const ex = M.crowdExcite, t = M.time;
   for (const f of M.crowd) {
+    if (!!f.near !== near) continue;
     const jump = Math.max(0, Math.sin(t * 9 + f.ph)) * 7 * ex;
-    const x = PX(f.x, f.z + jump), y = PY(f.y, f.z + jump);
+    const x = PX(f.x, f.y, f.z + jump), y = PY(f.y, f.z + jump);
     if (x < -20 || x > VW + 20 || y < -20 || y > VH + 20) continue;
-    const s = CZ * f.s;
+    const s = KZ(f.y) * f.s;
     c.fillStyle = f.col; c.fillRect(x - 6 * s, y - 12 * s, 12 * s, 12 * s);
     c.fillStyle = f.skin; c.beginPath(); c.arc(x, y - 17 * s, 5 * s, 0, TAU); c.fill();
     if (ex > 0.6) { c.fillRect(x - 8 * s, y - 26 * s, 2.5 * s, 12 * s); c.fillRect(x + 5.5 * s, y - 26 * s, 2.5 * s, 12 * s); }
@@ -215,33 +232,33 @@ function drawPitch(c) {
   const S = M.stadium;
   const y0 = PY(0), y1 = PY(FH);
   const n = 14, w = FW / n;
-  for (let i = 0; i < n; i++) { c.fillStyle = i % 2 ? S.grassA : S.grassB; c.fillRect(PX(i * w), y0, PX((i + 1) * w) - PX(i * w) + 0.5, y1 - y0); }
+  for (let i = 0; i < n; i++) quad(c, [P3(i * w, 0), P3((i + 1) * w + 1, 0), P3((i + 1) * w + 1, FH), P3(i * w, FH)], i % 2 ? S.grassA : S.grassB);
   // run-off area beyond goal lines
   c.fillStyle = shade(S.grassA, -0.15);
-  c.fillRect(PX(-GOAL_D - 40), y0, PX(0) - PX(-GOAL_D - 40), y1 - y0);
-  c.fillRect(PX(FW), y0, PX(FW + GOAL_D + 40) - PX(FW), y1 - y0);
+  quad(c, [P3(-GOAL_D - 40, 0), P3(0, 0), P3(0, FH), P3(-GOAL_D - 40, FH)], c.fillStyle);
+  quad(c, [P3(FW, 0), P3(FW + GOAL_D + 40, 0), P3(FW + GOAL_D + 40, FH), P3(FW, FH)], c.fillStyle);
   if (S.id === 'kili') { // ice sheen
     c.fillStyle = 'rgba(255,255,255,0.25)';
-    for (let i = 0; i < 6; i++) { c.beginPath(); c.moveTo(PX(i * 320 + 40), y0); c.lineTo(PX(i * 320 + 120), y0); c.lineTo(PX(i * 320 - 60), y1); c.lineTo(PX(i * 320 - 140), y1); c.fill(); }
+    for (let i = 0; i < 6; i++) quad(c, [P3(i * 320 + 40, 0), P3(i * 320 + 120, 0), P3(i * 320 - 60, FH), P3(i * 320 - 140, FH)], c.fillStyle);
   }
   if (S.id === 'afronaut') { // grid glow
     c.strokeStyle = 'rgba(120,255,230,0.08)'; c.lineWidth = 1;
-    for (let x = 0; x <= FW; x += 100) { c.beginPath(); c.moveTo(PX(x), y0); c.lineTo(PX(x), y1); c.stroke(); }
-    for (let y = 0; y <= FH; y += 100) { c.beginPath(); c.moveTo(PX(0), PY(y)); c.lineTo(PX(FW), PY(y)); c.stroke(); }
+    for (let x = 0; x <= FW; x += 100) { c.beginPath(); c.moveTo(...P3(x, 0)); c.lineTo(...P3(x, FH)); c.stroke(); }
+    for (let y = 0; y <= FH; y += 100) { c.beginPath(); c.moveTo(...P3(0, y)); c.lineTo(...P3(FW, y)); c.stroke(); }
   }
   c.strokeStyle = S.line; c.lineWidth = Math.max(1.5, 3 * CZ);
-  c.strokeRect(PX(0), y0, PX(FW) - PX(0), y1 - y0);
-  c.beginPath(); c.moveTo(PX(FW / 2), y0); c.lineTo(PX(FW / 2), y1); c.stroke();
-  c.beginPath(); c.ellipse(PX(FW / 2), PY(FH / 2), 130 * CZ, 130 * CZ * TILT, 0, 0, TAU); c.stroke();
-  circle(c, PX(FW / 2), PY(FH / 2), 4 * CZ, S.line);
+  quad(c, [P3(0, 0), P3(FW, 0), P3(FW, FH), P3(0, FH)], null, S.line, c.lineWidth);
+  c.beginPath(); c.moveTo(...P3(FW / 2, 0)); c.lineTo(...P3(FW / 2, FH)); c.stroke();
+  groundPath(c, FW / 2, FH / 2, 130); c.stroke();
+  circle(c, PX(FW / 2, FH / 2), PY(FH / 2), 4 * KZ(FH / 2), S.line);
   for (const sd of [0, 1]) {
     const gx = sd ? FW : 0, dir = sd ? -1 : 1;
-    const box = (d, hw) => { c.beginPath(); c.moveTo(PX(gx), PY(FH / 2 - hw)); c.lineTo(PX(gx + dir * d), PY(FH / 2 - hw)); c.lineTo(PX(gx + dir * d), PY(FH / 2 + hw)); c.lineTo(PX(gx), PY(FH / 2 + hw)); c.stroke(); };
+    const box = (d, hw) => { c.beginPath(); c.moveTo(...P3(gx, FH / 2 - hw)); c.lineTo(...P3(gx + dir * d, FH / 2 - hw)); c.lineTo(...P3(gx + dir * d, FH / 2 + hw)); c.lineTo(...P3(gx, FH / 2 + hw)); c.stroke(); };
     box(250, 300); box(90, 175);
-    c.beginPath(); c.ellipse(PX(gx + dir * 250), PY(FH / 2), 80 * CZ, 80 * CZ * TILT, 0, sd ? Math.PI / 2 : -Math.PI / 2, sd ? Math.PI * 1.5 : Math.PI / 2); c.stroke();
-    circle(c, PX(gx + dir * 180), PY(FH / 2), 3.5 * CZ, S.line);
+    groundPath(c, gx + dir * 250, FH / 2, 80, sd ? Math.PI / 2 : -Math.PI / 2, sd ? Math.PI * 1.5 : Math.PI / 2, 20); c.stroke();
+    circle(c, PX(gx + dir * 180, FH / 2), PY(FH / 2), 3.5 * KZ(FH / 2), S.line);
   }
-  c.save(); c.globalAlpha = 0.14; text(c, GAME_NAME, PX(FW / 2), PY(FH / 2), 46 * CZ, '#fff', 'center', null); c.restore();
+  c.save(); c.globalAlpha = 0.14; text(c, GAME_NAME, PX(FW / 2, FH / 2), PY(FH / 2), 46 * KZ(FH / 2), '#fff', 'center', null); c.restore();
 }
 
 function drawWallsBack(c) {
@@ -276,6 +293,7 @@ function drawWallsBack(c) {
 function drawWallFront(c) {
   const S = M.stadium;
   const xa = -GOAL_D - 40, xb = FW + GOAL_D + 40;
+  quad(c, [P3(xa - 400, FH + 20, 0), P3(xb + 400, FH + 20, 0), P3(xb + 400, FH + 260, -120), P3(xa - 400, FH + 260, -120)], shade(S.wallDark, -0.45));
   c.globalAlpha = 0.82;
   quad(c, [P3(xa, FH, 0), P3(xb, FH, 0), P3(xb, FH, WALL_H * 0.5), P3(xa, FH, WALL_H * 0.5)], S.wallDark);
   quad(c, [P3(xa, FH, WALL_H * 0.5 - 4), P3(xb, FH, WALL_H * 0.5 - 4), P3(xb, FH, WALL_H * 0.5), P3(xa, FH, WALL_H * 0.5)], S.wall);
@@ -286,6 +304,7 @@ function drawWallFront(c) {
     c.strokeStyle = '#2b2f12'; c.lineWidth = 1.5; for (let k = 0; k < 6; k++) { c.beginPath(); c.moveTo(px + (k - 3) * 14 * CZ, py - 20 * CZ); c.lineTo(px + (k - 3) * 14 * CZ + 6, py - 34 * CZ); c.stroke(); }
   }
   if (S.wallFx === 'sand') for (let x = -40; x < FW + 60; x += 110) { const [px, py] = P3(x, FH + 8, 0); ellipse(c, px, py - 8 * CZ, 66 * CZ, 22 * CZ, '#e9c98b'); ellipse(c, px - 10 * CZ, py - 14 * CZ, 40 * CZ, 10 * CZ, '#f5deb3'); }
+  drawCrowd(c, true);
   if (S.wallFx === 'snow') for (let x = -40; x < FW + 60; x += 90) { const [px, py] = P3(x, FH + 8, 0); ellipse(c, px, py - 6 * CZ, 52 * CZ, 16 * CZ, '#ffffff'); }
 }
 
@@ -314,15 +333,15 @@ function drawGoalFront(c, side) {
   c.lineCap = 'round'; c.strokeStyle = '#ffffff'; c.lineWidth = 6 * CZ;
   c.beginPath(); c.moveTo(...P3(gx, GY1, 0)); c.lineTo(...P3(gx, GY1, BAR_Z)); c.lineTo(...P3(gx, GY1 - 40, BAR_Z)); c.stroke();
   c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 2 * CZ;
-  c.beginPath(); c.moveTo(PX(gx) + 2, PY(GY1, 0)); c.lineTo(PX(gx, BAR_Z) + 2, PY(GY1, BAR_Z)); c.stroke();
+  c.beginPath(); c.moveTo(PX(gx, GY1) + 2, PY(GY1, 0)); c.lineTo(PX(gx, GY1, BAR_Z) + 2, PY(GY1, BAR_Z)); c.stroke();
 }
 
 // ---------------------------------------------------------------------------
 function playerScale(p) {
-  return CZ * p.scale * (p.role === 'captain' ? p.team.cap.size * 0.95 : p.role === 'keeper' ? 1.1 : 0.95);
+  return KZ(p.y) * p.scale * (p.role === 'captain' ? p.team.cap.size * 0.95 : p.role === 'keeper' ? 1.1 : 0.95);
 }
 function drawPlayerEnt(c, p) {
-  const x = PX(p.x, p.z), y = PY(p.y, p.z);
+  const x = PX(p.x, p.y, p.z), y = PY(p.y, p.z);
   const s = playerScale(p);
   const tackling = p.state === 'tackle';
   const o = {
@@ -333,10 +352,15 @@ function drawPlayerEnt(c, p) {
     lyingDir: tackling ? sign(Math.cos(p.face)) * 0.55 : p.state === 'dive' ? p.lyingDir * 0.9 : p.lyingDir,
     spin: p.state === 'spin' || p.state === 'juke', flat: p.fx.flat > 0 ? Math.min(1, p.fx.flat) : 0,
     dance: p.state === 'dance', armsUp: p.armsUp || p.state === 'panic' || p.state === 'abducted',
+    kick: p.kickAnim > 0 ? 1 - p.kickAnim / 0.25 : 0, stretch: p.stretch > 0, ears: p.state === 'ears',
   };
   if (p.state === 'dive') o.expr = 'grit';
   if (p.fx.mega > 0) { c.save(); c.globalAlpha = 0.3; circle(c, x, y - 36 * s, 44 * s, `hsl(${(M.time * 400) % 360},100%,60%)`); c.restore(); }
+  if (p.fx.shield > 0) { c.save(); c.globalAlpha = 0.35 + 0.15 * Math.sin(M.time * 12); circle(c, x, y - 34 * s, 40 * s, 'rgba(255,212,59,0.25)', '#ffd43b', 3); c.restore(); }
   drawCharacter(c, o, x, y, s);
+  if (p.state === 'tea') { drawEmoji(c, '🍵', x + 22 * s, y - 34 * s, 22 * s); if (Math.random() < 0.05) part({ x: p.x + 20, y: p.y, z: 60, vz: 40, life: 0.8, max: 0.8, size: 8, color: '#ffffff', kind: 'smoke' }); }
+  if (p.state === 'ears') drawEmoji(c, '🙉', x + 24 * s, y - 80 * s, 22 * s, false, Math.sin(M.time * 20) * 0.2);
+  if (p.antic) drawEmoji(c, p.antic.icon, x + 22 * s, y - 50 * s, 24 * s, false, Math.sin(M.time * 3) * 0.2);
   if (p.fx.snow > 0 && p.state !== 'down') { const sc = M.stadium.wallFx === 'sand' ? '#e2bf7c' : '#ffffff'; ellipse(c, x, y - 64 * s, 16 * s, 9 * s, sc, '#cba', 1); circle(c, x - 2 * s, y - 72 * s, 7 * s, sc); }
   if (p.state === 'down' && p.z <= 5) {
     for (let i = 0; i < 3; i++) {
@@ -347,7 +371,7 @@ function drawPlayerEnt(c, p) {
   if (p.state === 'frozen') { /* ice drawn by character tint */ }
 }
 function drawPlayerOverlay(c, p) {
-  const x = PX(p.x, p.z), y = PY(p.y, p.z);
+  const x = PX(p.x, p.y, p.z), y = PY(p.y, p.z);
   const s = playerScale(p);
   const top = y - 86 * s - (p.state === 'down' ? -30 * s : 0);
   if (p.human && p.humanH && M.phase !== 'fulltime') {
@@ -356,6 +380,7 @@ function drawPlayerOverlay(c, p) {
     c.fillStyle = col; c.beginPath(); c.moveTo(x - 9, ty - 12); c.lineTo(x + 9, ty - 12); c.lineTo(x, ty); c.closePath(); c.fill();
     c.strokeStyle = '#000'; c.lineWidth = 2; c.stroke();
     text(c, p.humanH.label, x, ty - 23, 17, col, 'center', '#000', 4);
+    if (p.abilityCD <= 0) drawEmoji(c, (p.role === 'captain' ? p.team.cap.signature : p.team.cap.squad).icon, x + 24, ty - 22, 18, false, Math.sin(M.time * 6) * 0.25);
     if (p.humanH.switchFx > 0) { c.globalAlpha = p.humanH.switchFx * 2; c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.arc(x, y - 30 * s, 40 * s * (1.5 - p.humanH.switchFx), 0, TAU); c.stroke(); c.globalAlpha = 1; }
   }
   if (p.bubble) {
@@ -372,7 +397,7 @@ function drawPlayerOverlay(c, p) {
 }
 
 function drawChargeRing(c, p) {
-  const x = PX(p.x), y = PY(p.y), rx = p.r * CZ * 1.9, ry = rx * 0.45;
+  const x = PX(p.x, p.y), y = PY(p.y), rx = p.r * KZ(p.y) * 1.9, ry = rx * GT(p.y);
   c.lineWidth = 5 * CZ;
   c.strokeStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAU); c.stroke();
   c.strokeStyle = p.charge >= 1 ? '#ff3b3b' : mix('#ffe066', '#ff7b00', p.charge);
@@ -398,10 +423,10 @@ function drawBallTrail(c) {
     const a = i / tr.length;
     c.strokeStyle = `rgba(${col},${a * 0.55})`;
     c.lineWidth = base * 1.6 * a;
-    c.beginPath(); c.moveTo(PX(tr[i - 1].x, tr[i - 1].z), PY(tr[i - 1].y, tr[i - 1].z)); c.lineTo(PX(tr[i].x, tr[i].z), PY(tr[i].y, tr[i].z)); c.stroke();
+    c.beginPath(); c.moveTo(PX(tr[i - 1].x, tr[i - 1].y, tr[i - 1].z), PY(tr[i - 1].y, tr[i - 1].z)); c.lineTo(PX(tr[i].x, tr[i].y, tr[i].z), PY(tr[i].y, tr[i].z)); c.stroke();
   }
   if (st === 'disco') {
-    for (let i = 1; i < tr.length; i++) { c.strokeStyle = `hsla(${(i * 30 + M.time * 400) % 360},100%,60%,${i / tr.length * 0.6})`; c.lineWidth = base * 0.8; c.beginPath(); c.moveTo(PX(tr[i - 1].x, tr[i - 1].z), PY(tr[i - 1].y, tr[i - 1].z) - base); c.lineTo(PX(tr[i].x, tr[i].z), PY(tr[i].y, tr[i].z) - base); c.stroke(); }
+    for (let i = 1; i < tr.length; i++) { c.strokeStyle = `hsla(${(i * 30 + M.time * 400) % 360},100%,60%,${i / tr.length * 0.6})`; c.lineWidth = base * 0.8; c.beginPath(); c.moveTo(PX(tr[i - 1].x, tr[i - 1].y, tr[i - 1].z), PY(tr[i - 1].y, tr[i - 1].z) - base); c.lineTo(PX(tr[i].x, tr[i].y, tr[i].z), PY(tr[i].y, tr[i].z) - base); c.stroke(); }
   }
 }
 function drawBallEnt(c) {
@@ -411,12 +436,12 @@ function drawBallEnt(c) {
   const sz = BALL_R * CZ * (s ? (SUPER_SIZE[s.type] || 1) : 1);
   const sp = Math.hypot(b.vx, b.vy);
   const st = s ? SUPER_STYLE[s.type] : (sp > 1150 && !b.owner ? 'fire' : 'normal');
-  if (s && s.type === 'split') for (const d of s.decoys) drawBall(c, PX(d.x, d.z), PY(d.y, d.z), sz, b.rot, 'jollof', M.time);
-  drawBall(c, PX(b.x, b.z), PY(b.y, b.z) - sz, sz, b.rot, st, M.time);
-  if (s && s.type === 'curve') drawEmoji(c, '🫖', PX(b.x, b.z) + sz * 1.2, PY(b.y, b.z) - sz * 2.4, sz * 1.6);
+  if (s && s.type === 'split') for (const d of s.decoys) drawBall(c, PX(d.x, d.y, d.z), PY(d.y, d.z), sz, b.rot, 'jollof', M.time);
+  drawBall(c, PX(b.x, b.y, b.z), PY(b.y, b.z) - sz, sz, b.rot, st, M.time);
+  if (s && s.type === 'curve') drawEmoji(c, '🫖', PX(b.x, b.y, b.z) + sz * 1.2, PY(b.y, b.z) - sz * 2.4, sz * 1.6);
 }
 function drawBox(c, bx) {
-  const x = PX(bx.x, bx.z + 22), y = PY(bx.y, bx.z + 22 + Math.sin(M.time * 4 + bx.x) * 4), s = CZ;
+  const x = PX(bx.x, bx.y, bx.z + 22), y = PY(bx.y, bx.z + 22 + Math.sin(M.time * 4 + bx.x) * 4), s = KZ(bx.y);
   c.save(); c.translate(x, y); c.rotate(Math.sin(M.time * 2 + bx.y) * 0.15);
   const g = c.createLinearGradient(0, -18 * s, 0, 18 * s); g.addColorStop(0, '#ffe066'); g.addColorStop(1, '#ff9f1c');
   c.fillStyle = g; rrect(c, -18 * s, -18 * s, 36 * s, 36 * s, 7 * s); c.fill();
@@ -425,23 +450,23 @@ function drawBox(c, bx) {
   c.restore();
 }
 function drawProjectile(c, q) {
-  if (q.type === 'chicken') drawEmoji(c, '🐔', PX(q.x, q.z), PY(q.y, q.z), 42 * CZ, q.vx > 0, Math.sin(q.t * 20) * 0.3);
+  if (q.type === 'chicken') drawEmoji(c, '🐔', PX(q.x, q.y, q.z), PY(q.y, q.z), 42 * KZ(q.y), q.vx > 0, Math.sin(q.t * 20) * 0.3);
   else if (q.type === 'bomb') {
     const blink = q.fuse >= 0 && Math.floor(q.fuse * (q.fuse < 0.5 ? 16 : 8)) % 2 === 0;
     const sz = (34 + (q.fuse >= 0 ? (1.1 - q.fuse) * 14 : 0)) * CZ;
-    drawEmoji(c, '💣', PX(q.x, q.z + 14), PY(q.y, q.z + 14), sz);
-    if (blink) circle(c, PX(q.x, q.z + 14), PY(q.y, q.z + 14), sz * 0.45, 'rgba(255,0,0,0.45)');
+    drawEmoji(c, '🥥', PX(q.x, q.y, q.z + 14), PY(q.y, q.z + 14), sz);
+    if (blink) circle(c, PX(q.x, q.y, q.z + 14), PY(q.y, q.z + 14), sz * 0.45, 'rgba(255,0,0,0.45)');
   } else if (q.type === 'bees') {
     for (let i = 0; i < 6; i++) {
       const a = q.t * 9 + i * 1.05, r = 18 + Math.sin(q.t * 5 + i) * 8;
-      drawEmoji(c, '🐝', PX(q.x + Math.cos(a) * r, q.z + Math.sin(a * 1.3) * 10), PY(q.y + Math.sin(a) * r * 0.6, q.z + Math.sin(a * 1.3) * 10), 20 * CZ, Math.cos(a) < 0);
+      drawEmoji(c, '🐝', PX(q.x + Math.cos(a) * r, q.y, q.z + Math.sin(a * 1.3) * 10), PY(q.y + Math.sin(a) * r * 0.6, q.z + Math.sin(a * 1.3) * 10), 20 * KZ(q.y), Math.cos(a) < 0);
     }
   }
 }
 function drawUfo(c, h) {
-  const x = PX(h.x, h.z), y = PY(h.y, h.z);
+  const x = PX(h.x, h.y, h.z), y = PY(h.y, h.z);
   if (h.phase === 'beam' || h.phase === 'return') {
-    const gx = PX(h.x), gy = PY(h.y);
+    const gx = PX(h.x, h.y), gy = PY(h.y);
     const g = c.createLinearGradient(0, y, 0, gy);
     g.addColorStop(0, 'rgba(140,255,170,0.65)'); g.addColorStop(1, 'rgba(140,255,170,0.12)');
     c.fillStyle = g; c.beginPath(); c.moveTo(x - 16 * CZ, y); c.lineTo(x + 16 * CZ, y); c.lineTo(gx + 50 * CZ, gy); c.lineTo(gx - 50 * CZ, gy); c.fill();
@@ -452,7 +477,8 @@ function drawUfo(c, h) {
 function drawParticles(c) {
   for (const q of M.parts) {
     const a = clamp(q.life / q.max, 0, 1);
-    const x = PX(q.x, q.z), y = PY(q.y, q.z);
+    const x = PX(q.x, q.y, q.z), y = PY(q.y, q.z);
+    const CZ = KZ(q.y); // particles shrink with distance
     switch (q.kind) {
       case 'text': {
         const age = q.max - q.life, sc = age < 0.15 ? easeOutBack(age / 0.15) : 1;
@@ -460,6 +486,7 @@ function drawParticles(c) {
         text(c, q.text, x, y, q.size * sc * Math.max(0.8, CZ), q.color, 'center', '#000', Math.max(3, q.size * 0.18));
         c.globalAlpha = 1; break;
       }
+      case 'emoji': drawEmoji(c, q.text, x, y, q.size * CZ, false, q.rot, Math.min(1, a * 2)); break;
       case 'smoke': c.globalAlpha = a * 0.45; circle(c, x, y, q.size * CZ * (1.8 - a), q.color); c.globalAlpha = 1; break;
       case 'flame': c.globalAlpha = a; circle(c, x, y, q.size * CZ * (0.4 + a * 0.6), q.color); c.globalAlpha = 1; break;
       case 'confetti': c.save(); c.translate(x, y); c.rotate(q.rot); c.scale(1, Math.cos(q.rot * 2)); c.globalAlpha = Math.min(1, a * 3); c.fillStyle = q.color; c.fillRect(-q.size * CZ / 2, -q.size * CZ / 4, q.size * CZ, q.size * CZ / 2); c.restore(); break;
@@ -475,12 +502,12 @@ function drawParticles(c) {
       case 'ring': {
         const k = 1 - a;
         c.globalAlpha = a; c.strokeStyle = q.color; c.lineWidth = 6 * CZ;
-        c.beginPath(); c.ellipse(PX(q.x), PY(q.y), q.size * CZ * k, q.size * CZ * k * TILT, 0, 0, TAU); c.stroke(); c.globalAlpha = 1; break;
+        c.beginPath(); c.ellipse(PX(q.x, q.y), PY(q.y), q.size * CZ * k, q.size * CZ * k * GT(q.y), 0, 0, TAU); c.stroke(); c.globalAlpha = 1; break;
       }
       case 'bolt': {
         c.globalAlpha = a; c.strokeStyle = '#ffffff'; c.lineWidth = 6 * CZ; c.shadowColor = '#7cf3ff'; c.shadowBlur = 20;
-        c.beginPath(); let px = PX(q.x, 700), py = PY(q.y, 700); c.moveTo(px, py);
-        for (let i = 1; i <= 8; i++) { const z = 700 - i * 87.5; px = PX(q.x + rand(-40, 40) * (i < 8 ? 1 : 0), z); py = PY(q.y, z); c.lineTo(px, py); }
+        c.beginPath(); let px = PX(q.x, q.y, 700), py = PY(q.y, 700); c.moveTo(px, py);
+        for (let i = 1; i <= 8; i++) { const z = 700 - i * 87.5; px = PX(q.x + rand(-40, 40) * (i < 8 ? 1 : 0), q.y, z); py = PY(q.y, z); c.lineTo(px, py); }
         c.stroke(); c.shadowBlur = 0; c.globalAlpha = 1; break;
       }
       default: c.globalAlpha = a; circle(c, x, y, q.size * CZ * (0.5 + a * 0.5), q.color); c.globalAlpha = 1;
@@ -514,6 +541,21 @@ function drawHUD(c) {
       c.fillStyle = 'rgba(8,10,28,0.8)'; rrect(c, sx, sy, 40 * u, 40 * u, 9 * u); c.fill();
       c.strokeStyle = i === 0 && t.items[0] ? '#ffd43b' : 'rgba(255,255,255,0.4)'; c.lineWidth = 2; c.stroke();
       if (t.items[i]) drawEmoji(c, ITEMS[t.items[i]].icon, sx + 20 * u, sy + 20 * u, 30 * u * (i === 0 ? pop : 1));
+    }
+    // special power meter: the human's current player, or the captain for CPU teams
+    {
+      const hp = t.humans.length && t.humans[0].player ? t.humans[0].player : t.players[0];
+      const def = hp.role === 'captain' ? t.cap.signature : t.cap.squad;
+      const maxCD = hp.role === 'captain' ? POWER_CD : SQUAD_CD, frac = clamp(1 - hp.abilityCD / maxCD, 0, 1);
+      const ax = sd < 0 ? x + 20 * u + 2 * 46 * u + 8 * u : x + w - 20 * u - 40 * u - 2 * 46 * u - 8 * u, ay = y + h + 6 * u;
+      const ready = frac >= 1;
+      c.fillStyle = 'rgba(8,10,28,0.8)'; rrect(c, ax, ay, 40 * u, 40 * u, 9 * u); c.fill();
+      c.fillStyle = ready ? 'rgba(255,146,43,0.55)' : 'rgba(255,146,43,0.25)';
+      c.beginPath(); c.moveTo(ax + 20 * u, ay + 20 * u); c.arc(ax + 20 * u, ay + 20 * u, 18 * u, -Math.PI / 2, -Math.PI / 2 + TAU * frac); c.closePath(); c.fill();
+      c.strokeStyle = ready ? '#ff922b' : 'rgba(255,255,255,0.4)'; c.lineWidth = ready ? 3 : 2; rrect(c, ax, ay, 40 * u, 40 * u, 9 * u); c.stroke();
+      c.globalAlpha = ready ? 1 : 0.5; drawEmoji(c, def.icon, ax + 20 * u, ay + 20 * u, 26 * u * (ready ? 1 + 0.08 * Math.sin(M.time * 8) : 1)); c.globalAlpha = 1;
+      const glyph = t.humans.length ? (Input.glyph(t.humans[0].dev, 'ability') || (Input.help(t.humans[0].dev).ability || '').split(' ')[0]) : 'CPU';
+      text(c, glyph, ax + 20 * u, ay + 48 * u, 11 * u, ready ? '#ff922b' : '#aaa', 'center', '#000', 3);
     }
     void cx;
   }

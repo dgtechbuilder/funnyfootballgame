@@ -6,21 +6,21 @@ const KB_LAYOUTS = {
   kb1: {
     name: 'Keyboard 1', short: 'KEYS 1',
     up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
-    pass: ['KeyF', 'KeyJ'], shoot: ['KeyG', 'KeyK', 'Space'], tackle: ['KeyH', 'KeyL'], item: ['KeyR', 'KeyI'],
+    pass: ['KeyF', 'KeyJ'], shoot: ['KeyG', 'KeyK', 'Space'], tackle: ['KeyH', 'KeyL'], item: ['KeyR', 'KeyI'], ability: ['KeyQ', 'KeyU'],
     start: ['Enter'],
-    help: { move: 'W A S D', pass: 'F / J', shoot: 'G / K / Space', tackle: 'H / L', item: 'R / I' },
+    help: { move: 'W A S D', pass: 'F / J', shoot: 'G / K / Space', tackle: 'H / L', item: 'R / I', ability: 'Q / U' },
   },
   kb2: {
     name: 'Keyboard 2', short: 'KEYS 2',
     up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
-    pass: ['Comma', 'Numpad1'], shoot: ['Period', 'Numpad2'], tackle: ['Slash', 'Numpad3'], item: ['Quote', 'Numpad0', 'ShiftRight'],
+    pass: ['Comma', 'Numpad1'], shoot: ['Period', 'Numpad2'], tackle: ['Slash', 'Numpad3'], item: ['Quote', 'Numpad0', 'ShiftRight'], ability: ['Semicolon', 'Numpad4'],
     start: ['NumpadEnter'],
-    help: { move: 'ARROWS', pass: ', / Num1', shoot: '. / Num2', tackle: '/ / Num3', item: "' / Num0" },
+    help: { move: 'ARROWS', pass: ', / Num1', shoot: '. / Num2', tackle: '/ / Num3', item: "' / Num0", ability: '; / Num4' },
   },
 };
-const PAD_HELP = { move: 'Stick / D-pad', pass: 'A / ✕', shoot: 'B / ○ / RT', tackle: 'X / □ / LT', item: 'Y / △ / RB' };
-const TOUCH_HELP = { move: 'Left thumb', pass: 'PASS', shoot: 'SHOOT', tackle: 'TACKLE', item: 'ITEM' };
-const BTN_NAMES = ['pass', 'shoot', 'tackle', 'item', 'start'];
+const PAD_HELP = { move: 'Stick / D-pad', pass: 'A / ✕', shoot: 'B / ○ / RT', tackle: 'X / □ / LT', item: 'Y / △ / RB', ability: 'LB / L1' };
+const TOUCH_HELP = { move: 'Left thumb', pass: 'PASS', shoot: 'SHOOT', tackle: 'TACKLE', item: 'ITEM', ability: 'POWER' };
+const BTN_NAMES = ['pass', 'shoot', 'tackle', 'item', 'ability', 'start'];
 
 const Keys = { down: new Set(), pressed: new Set() };
 const GAME_CODES = new Set();
@@ -51,6 +51,7 @@ const Touch = {
         pass: { x: bx - r * 2.3, y: by + r * 0.5, r: r * 0.9, label: 'PASS', color: '#4dabf7' },
         tackle: { x: bx - r * 0.4, y: by - r * 2.2, r: r * 0.85, label: 'TACKLE', color: '#ffd43b' },
         item: { x: bx - r * 2.6, y: by - r * 1.6, r: r * 0.75, label: 'ITEM', color: '#b197fc' },
+        ability: { x: bx - r * 4.5, y: by + r * 0.2, r: r * 0.8, label: 'POWER', color: '#ff922b' },
       },
     };
   },
@@ -98,15 +99,15 @@ function handleTouch(e) {
 // ---------------- gamepads: families, raw profiles, custom remaps ----------------
 // Our layout is positional: PASS = bottom face button, SHOOT = right, TACKLE = left, ITEM = top.
 const PAD_FAMILIES = {
-  xbox:     { name: 'Xbox Controller',        icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
-  ps:       { name: 'PlayStation Controller', icon: '🎮', g: { pass: '✕', shoot: '○', tackle: '□', item: '△', start: 'OPTIONS' } },
-  switch:   { name: 'Nintendo Switch Pad',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: '+' } },
-  eightbitdo: { name: '8BitDo Controller',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: 'START' } },
-  logitech: { name: 'Logitech Gamepad',       icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'START' } },
-  steam:    { name: 'Steam Controller / Deck', icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
-  mobile:   { name: 'Phone Controller',        icon: '📱', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
-  retro:    { name: 'USB Retro Gamepad',       icon: '🕹️', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: 'START' } },
-  generic:  { name: 'Generic Gamepad',         icon: '🎮', g: { pass: '1', shoot: '2', tackle: '3', item: '4', start: 'START' } },
+  xbox:     { name: 'Xbox Controller',        icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', ability: 'LB', start: 'MENU' } },
+  ps:       { name: 'PlayStation Controller', icon: '🎮', g: { pass: '✕', shoot: '○', tackle: '□', item: '△', ability: 'L1', start: 'OPTIONS' } },
+  switch:   { name: 'Nintendo Switch Pad',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', ability: 'L', start: '+' } },
+  eightbitdo: { name: '8BitDo Controller',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', ability: 'L', start: 'START' } },
+  logitech: { name: 'Logitech Gamepad',       icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', ability: 'LB', start: 'START' } },
+  steam:    { name: 'Steam Controller / Deck', icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', ability: 'LB', start: 'MENU' } },
+  mobile:   { name: 'Phone Controller',        icon: '📱', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', ability: 'LB', start: 'MENU' } },
+  retro:    { name: 'USB Retro Gamepad',       icon: '🕹️', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', ability: 'L', start: 'START' } },
+  generic:  { name: 'Generic Gamepad',         icon: '🎮', g: { pass: '1', shoot: '2', tackle: '3', item: '4', ability: '5', start: 'START' } },
 };
 function padFamily(id) {
   const s = (id || '').toLowerCase();
@@ -230,18 +231,18 @@ const Input = {
       if (this.capture && this.capture.pad === d.id) { BTN_NAMES.forEach(b => this._setBtn(d[b], false)); d.mx = d.my = 0; continue; }
       const custom = PAD_MAPS[gp.id];
       const B = n => !!(gp.buttons[n] && (gp.buttons[n].pressed || gp.buttons[n].value > 0.5));
-      let ax = 0, ay = 0, pass, shoot, tackle, item, start;
+      let ax = 0, ay = 0, pass, shoot, tackle, item, ability, start;
       if (custom) {
         d.mapping = 'custom';
         ax = bindValue(gp, custom.right) - bindValue(gp, custom.left);
         ay = bindValue(gp, custom.down) - bindValue(gp, custom.up);
         const C = k => bindValue(gp, custom[k]) > 0.5;
-        pass = C('pass'); shoot = C('shoot'); tackle = C('tackle'); item = C('item'); start = C('start');
+        pass = C('pass'); shoot = C('shoot'); tackle = C('tackle'); item = C('item'); ability = C('ability'); start = C('start');
       } else if (gp.mapping === 'standard') {
         d.mapping = 'standard';
         ax = gp.axes[0] || 0; ay = gp.axes[1] || 0;
         if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1;
-        pass = B(0); shoot = B(1) || B(7); tackle = B(2) || B(6); item = B(3) || B(4) || B(5); start = B(9);
+        pass = B(0); shoot = B(1) || B(7); tackle = B(2) || B(6); item = B(3) || B(5); ability = B(4); start = B(9);
       } else {
         d.mapping = 'auto';
         const P = RAW_PROFILES[d.family] || RAW_PROFILES.generic;
@@ -253,14 +254,14 @@ const Input = {
         if (gp.buttons.length > 15) { if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1; }
         const f = P.face;
         const trig = k => B(P.trig[k]) || (P.trigAxes && (gp.axes[P.trigAxes[k]] || -1) > 0.3);
-        pass = B(f[0]); shoot = B(f[1]) || trig(1); tackle = B(f[2]) || trig(0); item = B(f[3]) || B(P.shoulder[0]) || B(P.shoulder[1]);
+        pass = B(f[0]); shoot = B(f[1]) || trig(1); tackle = B(f[2]) || trig(0); item = B(f[3]) || B(P.shoulder[1]); ability = B(P.shoulder[0]);
         start = P.start.some(B);
       }
       const mag = Math.hypot(ax, ay);
       if (mag < 0.22) { ax = 0; ay = 0; } else if (mag > 1) { ax /= mag; ay /= mag; }
       d.mx = ax; d.my = ay;
       this._setBtn(d.pass, pass); this._setBtn(d.shoot, shoot); this._setBtn(d.tackle, tackle);
-      this._setBtn(d.item, item); this._setBtn(d.start, start);
+      this._setBtn(d.item, item); this._setBtn(d.ability, ability); this._setBtn(d.start, start);
       if (mag > 0.3 || gp.buttons.some(b => b.pressed)) d.lastActive = this.time;
     }
     // touch

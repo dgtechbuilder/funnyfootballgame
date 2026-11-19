@@ -346,27 +346,35 @@ function drawCharacter(c, o, x, y, s) {
 
   // legs: two rounded blocks that lift alternately when running
   const sw = Math.sin(ph) * run;
+  const kickSide = fx >= 0 ? 1 : -1;
   for (const sd of [-1, 1]) {
     const lift = Math.max(0, sd * sw) * 5;
     const lw = tw / 2 - 1.5, lx = sd < 0 ? -tw / 2 + 0.5 : 1;
     const ly = -15 - bob * 0.3, lh = 15 - lift + bob * 0.3;
-    c.fillStyle = legCol; rrect(c, lx + fx * sd * sw * 1.5, ly, lw, lh, 4); c.fill();
+    c.save();
+    c.translate(lx + lw / 2 + fx * sd * sw * 1.5, ly);
+    if (o.kick > 0 && sd === kickSide) c.rotate(-kickSide * Math.sin(o.kick * Math.PI) * 1.25); // swing the kicking leg
+    c.fillStyle = legCol; rrect(c, -lw / 2, 0, lw, lh, 4); c.fill();
     c.strokeStyle = OUT; c.lineWidth = 1.2; c.stroke();
-    c.fillStyle = P(look && look.runner ? '#7CFC00' : '#1b1b1b'); rrect(c, lx + fx * sd * sw * 1.5 + fx * 1.5, ly + lh - 4, lw, 4.5, 2); c.fill();
+    c.fillStyle = P(look && look.runner ? '#7CFC00' : '#1b1b1b'); rrect(c, -lw / 2 + fx * 1.5, lh - 4, lw, 4.5, 2); c.fill();
+    c.restore();
   }
 
   // arms: rounded blocks hinged at the shoulder (sleeve + skin), swinging opposite the legs
   const drawArm = (sd) => {
     let ang = -sd * Math.sin(ph) * 0.65 * run;
     if (o.armsUp) ang = sd * (2.6 + Math.sin(t * 12 + sd) * 0.25);
+    if (o.stretch) ang = sd * (1.45 + Math.sin(t * 20) * 0.08);
+    if (o.ears) ang = sd * 2.75;
     else if (o.dance) ang = sd * (1.4 + Math.sin(t * 9 * sd) * 0.9);
     c.save();
     c.translate(sd * (tw / 2 + 4) + fx * 1, ty + 4);
     c.rotate(ang);
     const handCol = o.role === 'keeper' ? P('#ffffff') : P(o.skin);
-    c.fillStyle = handCol; rrect(c, -4, 0, 8, 21, 4); c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.2; c.stroke();
+    const al = o.stretch ? 70 : 21; // stretchy keeper arms!
+    c.fillStyle = handCol; rrect(c, -4, 0, 8, al, 4); c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.2; c.stroke();
     c.fillStyle = kitCol; rrect(c, -4.4, -0.5, 8.8, 9, 3.5); c.fill(); c.stroke();
-    if (o.role === 'keeper') { circle(c, 0, 21, 6.5, P('#ffffff'), OUT, 1.2); }
+    if (o.role === 'keeper') { circle(c, 0, al, o.stretch ? 9 : 6.5, P('#ffffff'), OUT, 1.2); }
     c.restore();
   };
   if (fx >= 0) drawArm(-1); else drawArm(1);
