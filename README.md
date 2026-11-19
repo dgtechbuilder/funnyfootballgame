@@ -103,7 +103,7 @@ Custom mappings are saved in your browser for that controller. Rumble feedback o
 | `js/data.js` | Captains, stadiums, items, names and commentary |
 | `js/audio.js` | WebAudio sound effects, vuvuzelas and the Afrobeats sequencer |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: family detection, raw profiles, hat D-pads, custom remaps, rumble |
-| `js/draw.js` | Drawing helpers and the procedural characters and ball |
+| `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |
 | `js/game.js` | Match simulation: physics, AI, keepers, items, hazards, super strikes |
 | `js/render.js` | Stadiums, crowd, pitch, entities, effects and HUD |
 | `js/main.js` | Clickable menus, controller setup and remap wizard, pause, results, and the main loop |
