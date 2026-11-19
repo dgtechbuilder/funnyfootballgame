@@ -122,6 +122,27 @@ const SFX = {
     this._env(g, t, 0.1, 0.35, 1.1);
     o.connect(f); f.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 1.2);
   },
+  animal(e) {
+    if (e === '🐘') { this.tone(420, 0.7, 'sawtooth', 0.18, 700); this.tone(430, 0.7, 'square', 0.08, 760, 0.02); }
+    else if (e === '🦓') { for (let i = 0; i < 5; i++) this.tone(700 - i * 60, 0.08, 'sawtooth', 0.1, 500, i * 0.07); }
+    else if (e === '🦒') this.tone(220, 0.25, 'sine', 0.15, 180);
+    else this.moo();
+  },
+  vuvuzela(dur = 2) {
+    // a swarm of slightly-detuned plastic horns (B-flat drone)
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 6; i++) {
+      const o = this.ctx.createOscillator(), g = this.ctx.createGain(), f = this.ctx.createBiquadFilter();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(233 * (1 + (Math.random() - 0.5) * 0.03) * (i === 5 ? 2 : 1), t);
+      f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2;
+      const st = t + Math.random() * 0.3;
+      g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.05, st + 0.15);
+      g.gain.setValueAtTime(0.05, st + dur * 0.8); g.gain.exponentialRampToValueAtTime(0.0001, st + dur);
+      o.connect(f); f.connect(g); g.connect(this.sfx); o.start(st); o.stop(st + dur + 0.05);
+    }
+  },
+  powerDown() { this.tone(400, 1.2, 'sawtooth', 0.15, 40); this.noise(0.4, 0.2, 'lowpass', 800, 100); },
   pickup() { [660, 880, 1320].forEach((f, i) => this.tone(f, 0.09, 'square', 0.1, null, i * 0.06)); },
   item() { this.tone(400, 0.25, 'square', 0.12, 1600); this.tone(800, 0.2, 'triangle', 0.1, 2400, 0.05); },
   freeze() { for (let i = 0; i < 8; i++) this.tone(1500 + Math.random() * 2500, 0.15, 'sine', 0.07, null, i * 0.03); },
@@ -147,7 +168,7 @@ const SFX = {
   // ---- tiny step-sequencer for background music ----
   _schedule() {
     if (!this.ctx) return;
-    const bpm = this.musicMode === 'match' ? 138 : 118;
+    const bpm = this.musicMode === 'match' ? 112 : 104;
     const stepDur = 60 / bpm / 4;
     while (this._nextTime < this.ctx.currentTime + 0.15) {
       this._playStep(this._step, this._nextTime, stepDur);
@@ -155,47 +176,47 @@ const SFX = {
     }
   },
   _playStep(s, t, sd) {
+    // Afrobeats / amapiano-flavoured groove: syncopated kick, shaker, bell, log-drum bass
     if (!this.musicOn) return;
     const ctx = this.ctx, dest = this.music;
+    const match = this.musicMode === 'match';
     const bar = Math.floor(s / 16) % 4, st = s % 16;
-    const roots = [0, -4, -2, -5]; // I - vi - vii - V-ish in semitones (C, Ab, Bb, G)
-    const root = 130.81 * Math.pow(2, roots[bar] / 12);
-    const osc = (freq, dur, type, vol, at = t) => {
+    const roots = [0, -3, -5, -7]; // i - VI - v - IV-ish in A minor-ish
+    const root = 110 * Math.pow(2, roots[bar] / 12);
+    const osc = (freq, dur, type, vol, at = t, slide = null) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = type; o.frequency.setValueAtTime(freq, at);
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, at + dur);
       g.gain.setValueAtTime(vol, at); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       o.connect(g); g.connect(dest); o.start(at); o.stop(at + dur + 0.02);
     };
-    // kick
-    if (st % 4 === 0) {
+    const noiseHit = (vol, hp, dur) => {
+      const n = ctx.createBufferSource(); n.buffer = this.noiseBuf;
+      const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+      const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      n.connect(f); f.connect(g); g.connect(dest); n.start(t, Math.random()); n.stop(t + dur + 0.01);
+    };
+    // kick: afrobeats "3-3-2" feel
+    if ([0, 3, 6, 8, 11, 14].includes(st) && (st !== 14 || bar % 2)) {
       const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.16);
+      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+      g.gain.setValueAtTime(st % 8 === 0 ? 0.9 : 0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.17);
     }
-    // snare
-    if (st === 4 || st === 12) {
-      const n = ctx.createBufferSource(); n.buffer = this.noiseBuf;
-      const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1500;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-      n.connect(f); f.connect(g); g.connect(dest); n.start(t, Math.random()); n.stop(t + 0.13);
-    }
-    // hats
-    if (st % 2 === 1) {
-      const n = ctx.createBufferSource(); n.buffer = this.noiseBuf;
-      const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-      n.connect(f); f.connect(g); g.connect(dest); n.start(t, Math.random()); n.stop(t + 0.05);
-    }
-    // bass (bouncy octaves)
-    const bassPat = [1, 0, 2, 0, 1, 0, 2, 1, 1, 0, 2, 0, 1, 2, 0, 2];
-    if (bassPat[st]) osc(root / 2 * (bassPat[st] === 2 ? 2 : 1), sd * 1.6, 'square', 0.18);
-    // lead: silly arpeggio, only in match mode for 2 of 4 bars
-    const scale = [0, 4, 7, 12, 7, 4, 9, 7];
-    const melody = this.musicMode === 'match'
-      ? [0, -1, 2, -1, 4, -1, 2, 5, -1, 4, -1, 2, 1, -1, 0, -1]
-      : [0, -1, -1, 2, -1, -1, 4, -1, 3, -1, 2, -1, 1, -1, -1, -1];
-    const m = melody[st];
-    if (m >= 0) osc(root * 2 * Math.pow(2, scale[m % 8] / 12), sd * 1.4, 'triangle', 0.14);
+    // rimshot / clap on 4 and 12
+    if (st === 4 || st === 12) noiseHit(0.3, 1800, 0.1);
+    // shaker 16ths with accent
+    noiseHit(st % 4 === 2 ? 0.13 : 0.06, 6500, 0.035);
+    // agogo bell (standard West African bell pattern approximated in 16ths)
+    const bell = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0];
+    if (bell[st]) osc(st === 0 ? 1320 : 990, 0.07, 'triangle', 0.07);
+    // log-drum bass (amapiano): pitch-sliding sine plucks
+    const logPat = match ? [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0] : [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0];
+    if (logPat[st]) osc(root * (st === 10 ? 1.5 : 1), sd * 2.6, 'sine', 0.42, t, root * 0.75);
+    // highlife-style guitar riff (pentatonic)
+    const scale = [0, 3, 5, 7, 10, 12, 15];
+    const riff = match ? [4, -1, 3, 2, -1, 3, -1, 1, 4, -1, 3, -1, 5, -1, 3, 2] : [2, -1, -1, 3, -1, -1, 4, -1, 3, -1, -1, 2, -1, 1, -1, -1];
+    const m = riff[st];
+    if (m >= 0) osc(root * 4 * Math.pow(2, scale[m] / 12), sd * 1.2, 'triangle', 0.09);
   },
 };

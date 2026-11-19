@@ -18,7 +18,7 @@ const KB_LAYOUTS = {
     help: { move: 'ARROWS', pass: ', / Num1', shoot: '. / Num2', tackle: '/ / Num3', item: "' / Num0" },
   },
 };
-const PAD_HELP = { move: 'Stick / D-pad', pass: 'A', shoot: 'B', tackle: 'X', item: 'Y / RB' };
+const PAD_HELP = { move: 'Stick / D-pad', pass: 'A / ✕', shoot: 'B / ○ / RT', tackle: 'X / □ / LT', item: 'Y / △ / RB' };
 const TOUCH_HELP = { move: 'Left thumb', pass: 'PASS', shoot: 'SHOOT', tackle: 'TACKLE', item: 'ITEM' };
 const BTN_NAMES = ['pass', 'shoot', 'tackle', 'item', 'start'];
 
@@ -82,7 +82,9 @@ function handleTouch(e) {
     let owned = false;
     for (const n in Touch.buttons) if (Touch.buttons[n] === t.identifier) owned = true;
     if (owned) continue;
-    // new touch
+    // new touch: on-screen pad only exists during live play; menus use taps (pointer events)
+    const inGame = typeof App !== 'undefined' && App.screen === 'match' && !App.paused;
+    if (!inGame) continue;
     let hit = null;
     for (const n in L.btns) { const b = L.btns[n]; if (Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.25) hit = n; }
     if (hit) Touch.buttons[hit] = t.identifier;
@@ -93,10 +95,74 @@ function handleTouch(e) {
 }
 ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(ev => window.addEventListener(ev, handleTouch, { passive: false }));
 
+// ---------------- gamepads: families, raw profiles, custom remaps ----------------
+// Our layout is positional: PASS = bottom face button, SHOOT = right, TACKLE = left, ITEM = top.
+const PAD_FAMILIES = {
+  xbox:     { name: 'Xbox Controller',        icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
+  ps:       { name: 'PlayStation Controller', icon: '🎮', g: { pass: '✕', shoot: '○', tackle: '□', item: '△', start: 'OPTIONS' } },
+  switch:   { name: 'Nintendo Switch Pad',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: '+' } },
+  eightbitdo: { name: '8BitDo Controller',    icon: '🎮', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: 'START' } },
+  logitech: { name: 'Logitech Gamepad',       icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'START' } },
+  steam:    { name: 'Steam Controller / Deck', icon: '🎮', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
+  mobile:   { name: 'Phone Controller',        icon: '📱', g: { pass: 'A', shoot: 'B', tackle: 'X', item: 'Y', start: 'MENU' } },
+  retro:    { name: 'USB Retro Gamepad',       icon: '🕹️', g: { pass: 'B', shoot: 'A', tackle: 'Y', item: 'X', start: 'START' } },
+  generic:  { name: 'Generic Gamepad',         icon: '🎮', g: { pass: '1', shoot: '2', tackle: '3', item: '4', start: 'START' } },
+};
+function padFamily(id) {
+  const s = (id || '').toLowerCase();
+  if (/054c|playstation|dualshock|dualsense|sony|ps[345]|^wireless controller/.test(s)) return 'ps';
+  if (/057e|nintendo|pro controller|joy-?con/.test(s)) return 'switch';
+  if (/2dc8|8bitdo/.test(s)) return 'eightbitdo';
+  if (/28de|steam|valve/.test(s)) return 'steam';
+  if (/046d|logitech/.test(s)) return 'logitech';
+  if (/backbone|kishi|razer|gamesir|mobile/.test(s)) return 'mobile';
+  if (/045e|xbox|xinput|microsoft|x-box/.test(s)) return 'xbox';
+  if (/0079|0810|0583|dragonrise|snes|retro|twin usb|usb gamepad|usb joystick|ipega/.test(s)) return 'retro';
+  return 'generic';
+}
+// Button layouts for browsers that DON'T report the 'standard' mapping (Firefox, Safari, older drivers).
+// face = [bottom, right, left, top]
+const RAW_PROFILES = {
+  xbox:     { face: [0, 1, 2, 3], start: [7, 9], shoulder: [4, 5], trig: [6, 7], trigAxes: [2, 5] },
+  steam:    { face: [0, 1, 2, 3], start: [7, 9], shoulder: [4, 5], trig: [6, 7], trigAxes: [2, 5] },
+  mobile:   { face: [0, 1, 2, 3], start: [9, 7], shoulder: [4, 5], trig: [6, 7] },
+  ps:       { face: [1, 2, 0, 3], start: [9], shoulder: [4, 5], trig: [6, 7] },
+  switch:   { face: [0, 1, 2, 3], start: [9], shoulder: [4, 5], trig: [6, 7] },
+  logitech: { face: [1, 2, 0, 3], start: [9], shoulder: [4, 5], trig: [6, 7] },
+  eightbitdo: { face: [1, 0, 4, 3], start: [11, 9], shoulder: [6, 7], trig: [8, 9] },
+  retro:    { face: [2, 1, 3, 0], start: [9], shoulder: [4, 5], trig: [6, 7] },
+  generic:  { face: [0, 1, 2, 3], start: [9, 7], shoulder: [4, 5], trig: [6, 7] },
+};
+const HAT_DIRS = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+function readHat(v) { // DirectInput POV hat packed in one axis: -1..1 in 8 steps, ~1.29 when centred
+  if (v === undefined || Math.abs(v) > 1.05) return null;
+  return HAT_DIRS[clamp(Math.round((v + 1) / (2 / 7)), 0, 7)];
+}
+let PAD_MAPS = {};
+try { PAD_MAPS = JSON.parse(localStorage.getItem('jollof-padmaps') || '{}') || {}; } catch (e) { PAD_MAPS = {}; }
+function savePadMaps() { try { localStorage.setItem('jollof-padmaps', JSON.stringify(PAD_MAPS)); } catch (e) { /* ignore */ } }
+// a bind is {b: buttonIndex} or {a: axisIndex, s: sign} or {a, hat: value}
+function bindValue(gp, bind) {
+  if (!bind) return 0;
+  if (bind.b !== undefined) { const b = gp.buttons[bind.b]; return b ? (b.pressed ? 1 : b.value || 0) : 0; }
+  const v = gp.axes[bind.a];
+  if (v === undefined) return 0;
+  if (bind.hat !== undefined) return Math.abs(v - bind.hat) < 0.16 ? 1 : 0;
+  return clamp(v * bind.s, 0, 1);
+}
+
+// ---------------- mouse / pointer (menus are fully clickable) ----------------
+const Mouse = { x: -1, y: -1, down: false, clicked: false, moved: false, active: false, wheel: 0, type: 'mouse' };
+window.addEventListener('pointermove', e => { Mouse.x = e.clientX; Mouse.y = e.clientY; Mouse.moved = true; Mouse.type = e.pointerType; if (e.pointerType === 'mouse') Mouse.active = true; });
+window.addEventListener('pointerdown', e => { Mouse.x = e.clientX; Mouse.y = e.clientY; Mouse.down = true; Mouse.type = e.pointerType; if (e.pointerType === 'mouse') Mouse.active = true; SFX.init(); });
+window.addEventListener('pointerup', e => { Mouse.x = e.clientX; Mouse.y = e.clientY; if (Mouse.down) Mouse.clicked = true; Mouse.down = false; });
+window.addEventListener('wheel', e => { Mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
+window.addEventListener('contextmenu', e => e.preventDefault());
+
 // ---------------- unified devices ----------------
 function mkBtn() { return { down: false, pressed: false, released: false }; }
 function mkDev(id, name, short, kind) {
-  const d = { id, name, short, kind, connected: kind === 'kb', mx: 0, my: 0, navX: 0, navY: 0, _nav: { x: 0, y: 0, t: 0 }, lastActive: 0 };
+  const d = { id, name, short, kind, connected: kind === 'kb', mx: 0, my: 0, navX: 0, navY: 0, _nav: { x: 0, y: 0, t: 0 }, lastActive: 0, family: kind === 'pad' ? 'generic' : null, gpId: '', mapping: '' };
   BTN_NAMES.forEach(b => d[b] = mkBtn());
   return d;
 }
@@ -116,6 +182,20 @@ const Input = {
   time: 0,
 
   help(id) { return id.startsWith('kb') ? KB_LAYOUTS[id].help : id === 'touch' ? TOUCH_HELP : PAD_HELP; },
+  glyph(id, btn) { const d = this.devices[id]; return d && d.kind === 'pad' ? PAD_FAMILIES[d.family].g[btn] : null; },
+  rumbleOn: true,
+  rumble(id, ms = 150, strong = 0.5, weak = 0.5) {
+    if (!this.rumbleOn || !id || !id.startsWith('pad')) return;
+    const gp = (navigator.getGamepads ? navigator.getGamepads() : [])[+id.slice(3)];
+    if (!gp) return;
+    try {
+      if (gp.vibrationActuator && gp.vibrationActuator.playEffect) gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak }).catch(() => {});
+      else if (gp.hapticActuators && gp.hapticActuators[0]) gp.hapticActuators[0].pulse(Math.max(strong, weak), ms);
+    } catch (e) { /* rumble unsupported */ }
+  },
+  rumbleAll(ms, s, w) { for (const id of this.order) if (this.devices[id].kind === 'pad' && this.devices[id].connected) this.rumble(id, ms, s, w); },
+  onConnect: null,
+  rawPads() { return navigator.getGamepads ? navigator.getGamepads() : []; },
 
   _setBtn(b, isDown) { b.pressed = isDown && !b.down; b.released = !isDown && b.down; b.down = isDown; },
 
@@ -132,19 +212,55 @@ const Input = {
       if (x || y || BTN_NAMES.some(b => d[b].down)) d.lastActive = this.time;
     }
     // gamepads
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pads = this.rawPads();
     for (let i = 0; i < 4; i++) {
       const d = this.devices['pad' + i], gp = pads[i];
+      const was = d.connected;
       d.connected = !!(gp && gp.connected);
-      if (!d.connected) { d.mx = d.my = 0; BTN_NAMES.forEach(b => this._setBtn(d[b], false)); continue; }
-      let ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
-      const B = n => !!(gp.buttons[n] && gp.buttons[n].pressed);
-      if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1;
+      if (!d.connected) {
+        d.mx = d.my = 0; BTN_NAMES.forEach(b => this._setBtn(d[b], false));
+        if (was && this.onConnect) this.onConnect(d, false);
+        continue;
+      }
+      if (d.gpId !== gp.id) {
+        d.gpId = gp.id; d.family = padFamily(gp.id);
+        d.name = PAD_FAMILIES[d.family].name; d.short = 'PAD ' + (i + 1);
+      }
+      if (!was && this.onConnect) this.onConnect(d, true);
+      if (this.capture && this.capture.pad === d.id) { BTN_NAMES.forEach(b => this._setBtn(d[b], false)); d.mx = d.my = 0; continue; }
+      const custom = PAD_MAPS[gp.id];
+      const B = n => !!(gp.buttons[n] && (gp.buttons[n].pressed || gp.buttons[n].value > 0.5));
+      let ax = 0, ay = 0, pass, shoot, tackle, item, start;
+      if (custom) {
+        d.mapping = 'custom';
+        ax = bindValue(gp, custom.right) - bindValue(gp, custom.left);
+        ay = bindValue(gp, custom.down) - bindValue(gp, custom.up);
+        const C = k => bindValue(gp, custom[k]) > 0.5;
+        pass = C('pass'); shoot = C('shoot'); tackle = C('tackle'); item = C('item'); start = C('start');
+      } else if (gp.mapping === 'standard') {
+        d.mapping = 'standard';
+        ax = gp.axes[0] || 0; ay = gp.axes[1] || 0;
+        if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1;
+        pass = B(0); shoot = B(1) || B(7); tackle = B(2) || B(6); item = B(3) || B(4) || B(5); start = B(9);
+      } else {
+        d.mapping = 'auto';
+        const P = RAW_PROFILES[d.family] || RAW_PROFILES.generic;
+        ax = gp.axes[0] || 0; ay = gp.axes[1] || 0;
+        // D-pad: hat switch axis (Windows/DirectInput) or a pair of digital axes (Linux)
+        const hat = gp.axes.length > 9 ? readHat(gp.axes[9]) : null;
+        if (hat) { ax = hat[0]; ay = hat[1]; }
+        else if (gp.axes.length >= 8) { const hx = gp.axes[6], hy = gp.axes[7]; if (Math.abs(hx) > 0.5) ax = Math.sign(hx); if (Math.abs(hy) > 0.5) ay = Math.sign(hy); }
+        if (gp.buttons.length > 15) { if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1; }
+        const f = P.face;
+        const trig = k => B(P.trig[k]) || (P.trigAxes && (gp.axes[P.trigAxes[k]] || -1) > 0.3);
+        pass = B(f[0]); shoot = B(f[1]) || trig(1); tackle = B(f[2]) || trig(0); item = B(f[3]) || B(P.shoulder[0]) || B(P.shoulder[1]);
+        start = P.start.some(B);
+      }
       const mag = Math.hypot(ax, ay);
       if (mag < 0.22) { ax = 0; ay = 0; } else if (mag > 1) { ax /= mag; ay /= mag; }
       d.mx = ax; d.my = ay;
-      this._setBtn(d.pass, B(0)); this._setBtn(d.shoot, B(1) || B(7)); this._setBtn(d.tackle, B(2) || B(6));
-      this._setBtn(d.item, B(3) || B(5) || B(4)); this._setBtn(d.start, B(9));
+      this._setBtn(d.pass, pass); this._setBtn(d.shoot, shoot); this._setBtn(d.tackle, tackle);
+      this._setBtn(d.item, item); this._setBtn(d.start, start);
       if (mag > 0.3 || gp.buttons.some(b => b.pressed)) d.lastActive = this.time;
     }
     // touch
@@ -152,7 +268,7 @@ const Input = {
       const d = this.devices.touch;
       d.connected = Touch.active;
       d.mx = Touch.stickVec.x; d.my = Touch.stickVec.y;
-      for (const b of BTN_NAMES) this._setBtn(d[b], Touch.buttons[b] !== undefined || (b === 'start' && !!Touch.tapPending));
+      for (const b of BTN_NAMES) this._setBtn(d[b], Touch.buttons[b] !== undefined);
       if (Touch.stick || Object.keys(Touch.buttons).length) d.lastActive = this.time;
     }
     // menu navigation edges with key-repeat
@@ -173,7 +289,7 @@ const Input = {
     this.global.mute = Keys.pressed.has('KeyN');
     this.global.music = Keys.pressed.has('KeyM');
   },
-  endFrame() { Keys.pressed.clear(); },
+  endFrame() { Keys.pressed.clear(); Mouse.clicked = false; Mouse.moved = false; Mouse.wheel = 0; },
 
   // menu helpers: aggregate across all devices
   navX() { let v = 0; for (const id of this.order) v = v || this.devices[id].navX; return v; },
