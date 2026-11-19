@@ -2,7 +2,7 @@
 
 *"Monate" means fun (also nice, enjoyable) in Sesotho, Setswana and Sepedi.*
 
-A chaotic, arcade-style football game for 1–6 players, playable in the browser. Teams are 4 players plus a goalkeeper, led by larger-than-life captains from across Africa. The characters are chunky, rounded-block figures in the spirit of Roblox avatars, but softer and less boxy.
+A chaotic, arcade-style football game, seen from a low, side-on broadcast camera, for 1–6 players, playable in the browser. Teams are 4 players plus a goalkeeper, led by larger-than-life captains from across Africa. The characters are chunky, rounded-block figures in the spirit of Roblox avatars, but softer and less boxy.
 
 Everything is drawn and synthesized in code, including the Afrobeats / amapiano soundtrack and the vuvuzelas. There are no image or audio assets and no build step.
 
@@ -22,14 +22,14 @@ Every menu is fully clickable: buttons, captains, stadiums and option arrows. Cl
 
 ### Keyboard and controllers
 
-|              | Move           | Pass / Switch | Shoot (hold to charge) | Tackle / Juke | Item        |
-|--------------|----------------|---------------|------------------------|---------------|-------------|
-| Keyboard 1   | `W A S D`      | `F` or `J`    | `G`, `K` or `Space`    | `H` or `L`    | `R` or `I`  |
-| Keyboard 2   | Arrows         | `,` / Num1    | `.` / Num2             | `/` / Num3    | `'` / Num0  |
-| Xbox         | Stick / D-pad  | A             | B / RT                 | X / LT        | Y / RB      |
-| PlayStation  | Stick / D-pad  | ✕             | ○ / R2                 | □ / L2        | △ / R1      |
-| Switch / 8BitDo | Stick / D-pad | B           | A / ZR                 | Y / ZL        | X / R       |
-| Touch        | Drag left side | PASS          | SHOOT                  | TACKLE        | ITEM        |
+|              | Move           | Pass / Switch | Shoot (hold to charge) | Tackle / Juke | Item        | Power      |
+|--------------|----------------|---------------|------------------------|---------------|-------------|------------|
+| Keyboard 1   | `W A S D`      | `F` or `J`    | `G`, `K` or `Space`    | `H` or `L`    | `R` or `I`  | `Q` or `U` |
+| Keyboard 2   | Arrows         | `,` / Num1    | `.` / Num2             | `/` / Num3    | `'` / Num0  | `;` / Num4 |
+| Xbox         | Stick / D-pad  | A             | B / RT                 | X / LT        | Y / RB      | LB         |
+| PlayStation  | Stick / D-pad  | ✕             | ○ / R2                 | □ / L2        | △ / R1      | L1         |
+| Switch / 8BitDo | Stick / D-pad | B           | A / ZR                 | Y / ZL        | X / R       | L          |
+| Touch        | Drag left side | PASS          | SHOOT                  | TACKLE        | ITEM        | POWER      |
 
 `Esc` / `P` / Start pauses the game, `N` mutes and `M` toggles the music.
 
@@ -70,6 +70,32 @@ Custom mappings are saved in your browser for that controller. Rumble feedback o
 | Sipho Vuvuzela | 🇿🇦 South Africa | **Amapiano Blast:** the keeper can't stop dancing |
 | Ranger Juma | 🇹🇿 Tanzania | **Kilimanjaro Cannon:** fired from a cannon |
 
+## Special powers
+
+Every player has a silly power on the **POWER** button. Captains have a signature power that recharges in 13 seconds. Every teammate has a squad power that recharges in 9 seconds. The orange meter beside your items fills up when it's ready, and a little icon pops up next to your player tag.
+
+| Team | Captain's signature power | Squad power (all teammates) |
+|---|---|---|
+| Danfo Demolition FC | 📯 **HONK HONK!** The danfo horn blows everyone in front away | 💨 **OSHOFREE!** A speed burst and a shoulder barge |
+| Rift Valley Rockets | 🌪️ **SECOND WIND:** huge speed, and nobody can tackle you | 👟 **SPRINT:** a burst of Kenyan pace |
+| Black Star Bandits | 🥄 **WOODEN SPOON:** a spin that whacks everyone nearby and steals the ball | 💰 **LAST PRICE!** A haggle shield; tackles bounce off |
+| Nile Crocodiles | 🎳 **BELLY BOWLING:** inflates and rolls through defenders | 🫃 **BELLY BUMP:** knocks over anyone close |
+| Wahala Labs United | 🌀 **PORTAL GUN:** teleports far ahead, ball and all | 💨 **SMOKE BOMB:** poof, reappears to the side |
+| Teranga Tea Party | 🫖 **TEA BREAK:** nearby rivals must stop for tea | ☕ **TEA SPLASH:** hot tea makes a rival slip and spin |
+| Soweto Groove Machine | 📢 **VUVUZELA BLAST:** rivals in front, keepers included, cover their ears | 🕺 **GWARA GWARA:** a dance-spin dodge; anyone close starts dancing |
+| Serengeti Stampede | 🦓 **STAMPEDE!** A herd of zebras and wildebeest charges across the pitch | 🦁 **LION ROAR:** nearby rivals panic and flee |
+
+**Goalkeepers are no exception.** When the ball is far away they get distracted:
+
+- 📱 phone calls
+- 🍢 suya snacks
+- 🤳 selfies
+- 💤 naps
+
+That makes them slow to react when the ball comes back. Sometimes they also grow **STRETCHY ARMS** to reach a shot they couldn't otherwise get to.
+
+CPU teams use their powers too.
+
 ## Stadiums
 
 | Stadium | Walls | Hazard |
@@ -83,7 +109,7 @@ Custom mappings are saved in your browser for that controller. Rumble feedback o
 
 ## How it plays
 
-- **Shooting:** shots always aim at the goal. Hold the stick up or down to pick a corner. A longer charge gives a harder shot.
+- **Shooting:** shots fly at the goal at high speed after a very short wind-up, with a kicking-leg animation. Tap Shoot for a quick shot, or hold it for a fraction of a second for a full-power one. Hold the stick up or down to pick a corner.
 - **Super Strikes:** fully charge with your **captain** near the opponent's goal, then release when the shrinking ring lines up with the green circle.
 - **One-timers:** press Shoot while a pass is coming to you for an instant **PERFECT** volley.
 - **Tackles:** slide into the ball carrier to win the ball. If you flatten someone who doesn't have the ball, it's a **CHEAP SHOT** and their team gets a free power-up.

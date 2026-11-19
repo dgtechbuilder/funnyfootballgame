@@ -8,6 +8,7 @@ const REMAP_STEPS = [
   ['left', 'PUSH LEFT', 'stick or D-pad'], ['right', 'PUSH RIGHT', 'stick or D-pad'],
   ['pass', 'PRESS: PASS / SWITCH', 'usually the BOTTOM face button'], ['shoot', 'PRESS: SHOOT', 'usually the RIGHT face button'],
   ['tackle', 'PRESS: TACKLE', 'usually the LEFT face button'], ['item', 'PRESS: USE ITEM', 'usually the TOP face button'],
+  ['ability', 'PRESS: SPECIAL POWER', 'usually the LEFT shoulder (LB / L1 / L)'],
   ['start', 'PRESS: PAUSE', 'Start / Menu / Options / +'],
 ];
 const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true };
@@ -407,14 +408,14 @@ const App = {
 
   controlsCard(c, x, y, w) {
     const u = this.u();
-    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM'],
+    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER'],
       ['Keyboard 1', ...Object.values(KB_LAYOUTS.kb1.help)], ['Keyboard 2', ...Object.values(KB_LAYOUTS.kb2.help)],
-      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y / RB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△ / R1'],
-      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X / R']];
+      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y / RB', 'LB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△ / R1', 'L1'],
+      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X / R', 'L']];
     const h = 22 * u + rows.length * 25 * u;
     this.panel(c, x, y, w, h);
     rows.forEach((r, ri) => r.forEach((s, ci) => {
-      const cx = x + w * (0.09 + ci * 0.165);
+      const cx = x + w * (0.075 + ci * 0.142);
       text(c, s, cx, y + 20 * u + ri * 25 * u, 13.5 * u, ri === 0 ? '#ffe066' : (ci === 0 ? '#9cf' : '#fff'), 'center', null, 0, ri === 0 ? FONT : FONT_UI);
     }));
     return h;
@@ -430,6 +431,8 @@ const App = {
       '🌟  SUPER STRIKE: with your CAPTAIN near goal, fully charge. Release when the shrinking ring hits the green circle!',
       '🦵  TACKLE the ball carrier to steal it. Flatten someone WITHOUT the ball = CHEAP SHOT, and their team gets a power-up.',
       '🌀  JUKE: press TACKLE while you have the ball to spin past defenders.',
+      '🔥  POWERS: every captain has a silly signature power, every teammate a squad power. Press POWER (Q / LB / L1) when the meter is full.',
+      '🧤  Keepers get distracted by phone calls and suya when the ball is far away... and sometimes grow STRETCHY ARMS.',
       '⚡  ONE-TIMER: press SHOOT while a pass is coming to you for a PERFECT volley.',
       '🎁  POWER-UPS: run over ? boxes. 🍌 Plantain Peel  🐔 Market Chicken  🥥 Coconut Bomb  🌶️ Scotch Bonnet',
       '         🍩 Puff-Puff Power  ❄️ Harmattan Freeze  🧪 Tiny Tonic  🐝 Killer Bees',
@@ -471,6 +474,7 @@ const App = {
         text(c, fam.g[b], fx + ox * off, fy + oy * off + 1, fr * 1.05, on ? '#000' : '#fff', 'center', null);
       });
       text(c, fam.g.start, (sx + fx) / 2, fy - off * 1.25, 10 * u, d.start.down ? '#ffe066' : '#888', 'center', null, 0, FONT);
+      text(c, fam.g.ability + ' POWER', (sx + fx) / 2, fy + off * 1.3, 10 * u, d.ability.down ? '#ff922b' : '#888', 'center', null, 0, FONT);
       // actions
       const by = y + ch - 44 * u;
       this.button(c, x + 14 * u, by, 120 * u, 32 * u, '🛠 REMAP', () => this.startRemap(id), { size: 14 * u });
@@ -563,7 +567,7 @@ const App = {
     const gx = narrow ? 20 * u : W * 0.48, gw = narrow ? W - 40 * u : W * 0.49, gy = narrow ? H * 0.47 : 112 * u;
     if (narrow) text(c, `${cap.name.toUpperCase()} (${cap.country.toUpperCase()})`, W / 2, gy + 10 * u, 22 * u, '#fff', 'center', '#000', 4 * u);
     const iy = gy + (narrow ? 26 * u : 0);
-    this.panel(c, gx, iy, gw, 150 * u);
+    this.panel(c, gx, iy, gw, 190 * u);
     text(c, cap.team.toUpperCase(), gx + 16 * u, iy + 22 * u, 20 * u, cap.color === '#111111' ? '#fff' : (cap.color2 === '#111111' ? cap.color : cap.color2), 'left', '#000', 4 * u);
     wrapText(c, cap.blurb, gx + 16 * u, iy + 48 * u, gw - 32 * u, 14 * u, '#fff');
     const stats = [['SPEED', cap.speed / 1.25], ['POWER', cap.power / 1.3], ['TACKLE', cap.tackle / 1.45], ['SIZE', cap.size / 1.35]];
@@ -573,9 +577,12 @@ const App = {
       c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(sx + 64 * u, sy - 5 * u, gw / 2 - 100 * u, 10 * u);
       c.fillStyle = cap.color; c.fillRect(sx + 64 * u, sy - 5 * u, (gw / 2 - 100 * u) * clamp(v, 0.1, 1), 10 * u);
     });
-    text(c, `SUPER: ${cap.superName}`, gx + gw / 2, iy + 138 * u, 15 * u, '#ff8fd0', 'center', '#000', 3 * u);
-    const cols = 4, cw = (gw - 30 * u) / cols, chh = Math.min(cw * 0.95, (H - iy - 260 * u) / 2);
-    const gy2 = iy + 162 * u;
+    text(c, `SUPER STRIKE: ${cap.superName}`, gx + 16 * u, iy + 138 * u, 14 * u, '#ff8fd0', 'left', '#000', 3 * u);
+    const pw1 = `${cap.signature.icon} POWER: ${cap.signature.name} - ${cap.signature.desc}`, pw2 = `${cap.squad.icon} SQUAD: ${cap.squad.name} - ${cap.squad.desc}`;
+    text(c, pw1, gx + 16 * u, iy + 158 * u, Math.min(13 * u, (gw - 30 * u) / (pw1.length * 0.52)), '#ffb066', 'left', null, 0, FONT_UI);
+    text(c, pw2, gx + 16 * u, iy + 176 * u, Math.min(13 * u, (gw - 30 * u) / (pw2.length * 0.52)), '#9cf', 'left', null, 0, FONT_UI);
+    const cols = 4, cw = (gw - 30 * u) / cols, chh = Math.min(cw * 0.9, (H - iy - 300 * u) / 2);
+    const gy2 = iy + 200 * u;
     CAPTAINS.forEach((cp, i) => {
       const x = gx + (i % cols) * (cw + 10 * u), y = gy2 + Math.floor(i / cols) * (chh + 10 * u);
       const sel = cp.id === cap.id, hov = this.over(x, y, cw, chh);
@@ -587,8 +594,7 @@ const App = {
       text(c, cp.short.toUpperCase(), x + cw / 2, y + chh - 12 * u, Math.min(15 * u, cw / (cp.short.length * 0.7)), '#fff', 'center', '#000', 3 * u);
       this.hit(x, y, cw, chh, () => { if (this.cfg[key] === cp.id) this.pickCaptain(); else { this.cfg[key] = cp.id; SFX.ui(); } }, null, 'cap:' + cp.id);
     });
-    const by = gy2 + 2 * (chh + 10 * u) + 2 * u;
-    this.button(c, gx, by, 150 * u, 34 * u, '🎲 RANDOM', () => { this.cfg[key] = pick(CAPTAINS).id; SFX.boing(); }, { size: 15 * u });
+    this.button(c, W - 164 * u, 14 * u, 150 * u, 42 * u, '🎲 RANDOM', () => { this.cfg[key] = pick(CAPTAINS).id; SFX.boing(); }, { size: 15 * u });
     this.footer(c, 'CLICK or ARROWS / STICK to browse  ·  ENTER / A ✕ to pick  ·  ITEM = random  ·  ESC / B ○ = back');
     this.navButtons(c, () => this.back(left ? 'join' : 'capL'), () => this.pickCaptain(), 'PICK  ▶');
   },
@@ -709,6 +715,7 @@ const App = {
       ['🧤 STICKY GLOVES', top(p => p.stats.saves), p => `${p.stats.saves} saves`],
       ['😈 WAHALA MERCHANT', top(p => p.stats.cheap), p => `${p.stats.cheap} cheap shots`],
       ['🎁 ITEM HOARDER', top(p => p.stats.items), p => `${p.stats.items} items used`],
+      ['🔥 SHOW-OFF', top(p => p.stats.powers), p => `${p.stats.powers} powers used`],
     ].filter(a => { const v = a[2](a[1]); return !/^0 |^flattened 0x/.test(v); });
     const aw = Math.min(W - 40, 440 * u), ax = W / 2 - aw / 2, ay = 110 * u;
     if (awards.length) {

@@ -510,23 +510,29 @@ function drawCharacter(c, o, x, y, s) {
   // bob lifts the whole avatar: a little hop when running, jumps when celebrating
   const legDepth = sd => -sd * legX * sa + HIP * Math.sin(sd * legP0) * ca;
   const legOrder = legDepth(-1) < legDepth(1) ? [-1, 1] : [1, -1];
+  const kickSide = sa >= 0 ? 1 : -1;        // the leg nearer the camera does the kicking
+  const kickP = o.kick > 0 ? Math.sin(o.kick * Math.PI) * 1.25 : 0;
   for (const sd of legOrder) {
-    const p = sd * legP0;
+    const p = kickP && sd === kickSide ? kickP : sd * legP0;
     rbBlock(c, sd * legX, 0, HIP + bob, -legW / 2, legW / 2, -4.5, 4.5, -HIP, 1, 0, p, legSegs, RB_NOTOP);
   }
 
   // ---- arms: pitch (swing) and roll (splay)
   const armPose = sd => {
-    if (o.armsUp) return [sd * 0.38, Math.PI - 0.3 + Math.sin(t * 12 + sd) * 0.18];
+    if (o.ears) return [sd * 2.75, 0];                                   // hands over the ears
     if (o.dance) return [sd * 0.3, 1.6 + Math.sin(t * 9 + (sd > 0 ? 0 : Math.PI)) * 1.3];
+    if (o.stretch) return [sd * (1.45 + Math.sin(t * 20) * 0.08), 0];    // stretchy keeper arms, out wide
+    if (o.armsUp) return [sd * 0.38, Math.PI - 0.3 + Math.sin(t * 12 + sd) * 0.18];
     return [sd * 0.07, -sd * Math.sin(ph) * 0.8 * run];
   };
+  const armLen = o.stretch ? 70 : 19.5;
+  const stretchSegs = o.stretch ? (keeper ? [[0.13, P('#ffffff')], [1, bodyCol]] : [[0.85, skin], [1, bodyCol]]) : armSegs;
   const drawArm = sd => {
     const [roll, pitch] = armPose(sd);
-    rbBlock(c, sd * armX, 0, SH - 2 + bob, -armW, armW, -4.5, 4.5, -17.5, 2, roll, pitch, armSegs);
+    rbBlock(c, sd * armX, 0, SH - 2 + bob, -armW, armW, -4.5, 4.5, 2 - armLen, 2, roll, pitch, stretchSegs);
   };
   const nearSide = sa > 0 ? -1 : 1;          // the arm on this side is closer to the camera
-  const raised = o.armsUp || o.dance;
+  const raised = o.armsUp || o.dance || o.ears;
   drawArm(-nearSide);
 
   // ---- torso
