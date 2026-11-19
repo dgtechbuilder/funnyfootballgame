@@ -9,29 +9,21 @@ const GRAV = 1150;
 const CHARGE_TIME = 0.8, SWEET_TIME = 0.78;
 const FORM = [{ x: 0.58, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.4, y: 0.8 }, { x: 0.22, y: 0.5 }];
 const HUMAN_COLORS = ['#ff4d4d', '#4dabf7', '#ffd43b', '#51cf66', '#f783ac', '#ffa94d', '#b197fc'];
-const SKINS = ['#f0c8a0', '#c68e5f', '#8d5a3b', '#f5d6b8', '#e0ac69', '#6b4226'];
-const SIDEKICK_NAMES = {
-  headband: ['Biff', 'Chad', 'Tank'], helmet: ['Zippy', 'Dash', 'Turbo'], curlers: ['Doris', 'Mabel', 'Edna'],
-  mask: ['El Snacko', 'La Siesta', 'Mini Chunk'], goggles: ['Igor', 'Beaker', 'Subject 7'],
-  tophat: ['Jeeves', 'Lord Crumpet', 'Wigglesworth'], afro: ['Funky Fred', 'Boogie Bob', 'Groove Gary'],
-  bandana: ['Scurvy Steve', 'One-Sock Sam', 'Gilbert'],
-};
-const KEEPER_NAMES = ['Big Mitts', 'The Octopus', 'Butterfingers', 'The Wall', 'Sir Stopsalot', 'Gloves McGee'];
 const DIFF = {
   easy:   { react: 0.32, acc: 0.55, tackle: 0.55, keeper: 0.78, superAcc: 0.35, speed: 0.9, item: 0.5 },
   normal: { react: 0.18, acc: 0.78, tackle: 1.0, keeper: 1.0, superAcc: 0.62, speed: 1.0, item: 1 },
   hard:   { react: 0.09, acc: 0.95, tackle: 1.5, keeper: 1.12, superAcc: 0.85, speed: 1.06, item: 1.4 },
 };
 const SAVE_P = { boulder: 0.22, zigzag: 0.25, split: 0.2, sky: 0.18, teleport: 0.14, curve: 0.25, dance: 0.05, cannon: 0.26 };
-const SUPER_STYLE = { boulder: 'boulder', zigzag: 'electric', split: 'yarn', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
-const SUPER_SIZE = { boulder: 2.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
+const SUPER_STYLE = { boulder: 'bus', zigzag: 'electric', split: 'jollof', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
+const SUPER_SIZE = { boulder: 2.6, split: 1.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
 
 let M = null; // current match
 
 // ---------------------------------------------------------------------------
 function makePlayer(team, slot, role) {
   const cap = team.cap, isCap = role === 'captain', isK = role === 'keeper';
-  const names = SIDEKICK_NAMES[cap.sidekickHat] || ['Goon'];
+  const names = SIDEKICK_NAMES[cap.id] || ['Goon'];
   return {
     team, slot, role, look: cap.id, hat: cap.sidekickHat,
     name: isCap ? cap.short : isK ? pick(KEEPER_NAMES) : names[(slot - 1) % names.length],
@@ -77,7 +69,7 @@ function newMatch(cfg) {
     phase: 'intro', phaseT: 0, time: 0, timeLeft: cfg.minutes * 60, golden: false, done: false,
     parts: [], hazards: [], projectiles: [], boxes: [], decals: [],
     cam: { x: FW / 2, y: FH / 2, zoom: 1, tx: FW / 2, ty: FH / 2, tz: 1 },
-    shake: 0, hitStop: 0, slowmo: 1, flash: 0, flashCol: '#fff',
+    shake: 0, hitStop: 0, slowmo: 1, blackout: 0, flash: 0, flashCol: '#fff',
     banner: null, bigText: null, comm: { text: '', t: 0, shown: 0, pri: 0 }, commCD: 0, idleT: 12,
     nextBox: rand(6, 9), nextHazard: rand(11, 15), crowdExcite: 0.2, crowd: null, kickTeam: rand() < 0.5 ? 0 : 1,
     cine: null, lastScorer: null, goalTeam: null, demo: !!cfg.demo,
@@ -114,7 +106,8 @@ function resetKickoff(teamIdx) {
   b.owner = null;
   for (const h of M.teams[0].humans.concat(M.teams[1].humans)) h.player = null;
   M.phase = 'intro'; M.phaseT = 0; M.slowmo = 1;
-  M.hazards = M.hazards.filter(h => h.type === 'cow' || h.type === 'banana');
+  M.hazards = M.hazards.filter(h => h.type === 'animal' || h.type === 'banana');
+  M.blackout = 0;
   M.projectiles = [];
 }
 
@@ -166,6 +159,7 @@ function updateMatch(dt) {
   if (M.bigText) { M.bigText.t += dt; if (M.bigText.t > M.bigText.life) M.bigText = null; }
   if (M.banner) { M.banner.t += dt; if (M.banner.t > M.banner.life) M.banner = null; }
   for (const t of M.teams) t.itemFlash = Math.max(0, t.itemFlash - dt);
+  if (M.blackout > 0) { M.blackout -= dt; if (M.blackout <= 0) { SFX.cheer(0.8); say(['UP NEPA! The light is back!', 'Light don come back! UP NEPA!'], {}, 2); } }
 
   if (M.hitStop > 0) { M.hitStop -= dt; updateCamera(dt); return; }
   M.phaseT += dt;
@@ -455,6 +449,7 @@ function shoot(p, charge, aimY = null, perfect = false) {
   b.passTarget = null; b.keeperIgnore = null;
   p.charging = false; p.charge = 0; p.sweetT = -1; p.kickAnim = 0.25; p.stats.shots++;
   SFX.kick(charge); shake(2 + charge * 6);
+  if (p.human) Input.rumble(p.human, 60 + charge * 140, charge * 0.8, 0.3 + charge * 0.4);
   burst(b.x, b.y, 5, 6 + Math.floor(charge * 10), charge > 0.8 ? ['#ffd43b', '#ff922b', '#fff'] : '#ffffff', 250 + charge * 200, 'spark', 4, 0.4, 300);
   if (perfect) { floatText(p.x, p.y, 90, 'PERFECT!', '#7CFC00', 30); say(COMMENTARY.perfect, {}, 1); }
   if (charge > 0.85) { excite(0.6); if (Math.random() < 0.5) bubble(p, pick(['HIYAAA!', 'TAKE THAT!', 'BOOM!', ...p.team.cap.quips])); }
@@ -521,6 +516,7 @@ function knock(p, vx, vy, dur, cause = 'hit', silent = false) {
   p.charging = false; p.charge = 0; p.sweetT = -1;
   p.state = 'down'; p.stateT = dur; p.vx = vx; p.vy = vy; p.vz = Math.max(p.vz, 180 + Math.hypot(vx, vy) * 0.25);
   p.lyingDir = vx >= 0 ? 1 : -1; p.expr = 'hurt'; p.stats.knocked++;
+  if (p.human) Input.rumble(p.human, 260, 0.9, 0.5);
   if (!silent) bubble(p, pick(PAIN_WORDS));
   burst(p.x, p.y, 40, 6, ['#ffe066', '#ffffff'], 180, 'star', 7, 0.7, 300);
   SFX.bonk();
@@ -543,11 +539,15 @@ function wallEffect(p, nx, ny) {
     p.fx.snow = 5; p.stateT += 0.7; p.stats.zapped++; SFX.thud();
     burst(p.x, p.y, 30, 24, '#ffffff', 300, 'snow', 6, 0.9, 400);
     bubble(p, 'BRRRR!'); say(COMMENTARY.snow, n, 2);
+  } else if (fx === 'sand') {
+    p.fx.snow = 5; p.stateT += 0.7; p.stats.zapped++; SFX.thud();
+    burst(p.x, p.y, 30, 26, ['#e9c98b', '#d9ad62', '#f5deb3'], 300, 'snow', 6, 0.9, 400);
+    bubble(p, 'PFFT! SAND!'); say(COMMENTARY.sand, n, 2);
   } else if (fx === 'hay') {
     SFX.boing(); p.stats.zapped++;
     p.vx = nx * 650; p.vy = ny * 650; p.vz = 420;
     burst(p.x, p.y, 20, 16, ['#e9c46a', '#f4d58d', '#c9a227'], 260, 'feather', 6, 1, 200);
-    bubble(p, 'BOING!'); say(COMMENTARY.hay, n, 2);
+    bubble(p, 'OUCH! THORNS!'); say(COMMENTARY.hay, n, 2);
   }
 }
 
@@ -576,7 +576,7 @@ function updatePlayer(p, dt) {
     case 'tackle':
       p.vx *= Math.exp(-1.2 * dt); p.vy *= Math.exp(-1.2 * dt);
       p.stateT -= dt;
-      if (Math.random() < dt * 40) part({ x: p.x, y: p.y, z: 2, vx: -p.vx * 0.1, vy: -p.vy * 0.1, life: 0.4, max: 0.4, size: 7, color: M.stadium.id === 'frost' ? '#ffffff' : '#a5d6a7', kind: 'smoke' });
+      if (Math.random() < dt * 40) part({ x: p.x, y: p.y, z: 2, vx: -p.vx * 0.1, vy: -p.vy * 0.1, life: 0.4, max: 0.4, size: 7, color: M.stadium.id === 'kili' ? '#ffffff' : M.stadium.id === 'sahara' ? '#e9c98b' : '#a5d6a7', kind: 'smoke' });
       if (p.stateT <= 0) { p.state = 'recover'; p.stateT = 0.3; }
       break;
     case 'recover': case 'juke':
@@ -676,6 +676,7 @@ function contactInteractions(dt) {
       const ballNear = hadBall || dist(v.x, v.y, b.x, b.y) < 170;
       knock(v, p.vx * 0.75, p.vy * 0.75, 0.9 + 0.35 * p.tackleP * (v.fx.shrink > 0 ? 1.5 : 1), 'tackle');
       p.stats.tackles++;
+      if (p.human) Input.rumble(p.human, 120, 0.6, 0.6);
       M.hitStop = 0.05; shake(7);
       excite(0.5);
       if (hadBall) {
@@ -868,7 +869,8 @@ function scoreGoal(team) {
   const own = scorer.team !== team;
   if (!own) scorer.stats.goals++;
   M.lastScorer = scorer;
-  SFX.goalJingle(); SFX.cheer(1.5); SFX.whistle();
+  Input.rumbleAll(500, 0.7, 1);
+  SFX.goalJingle(); SFX.cheer(1.5); SFX.whistle(); SFX.vuvuzela(2.5);
   excite(1.5);
   const gx = team.dir > 0 ? FW : 0;
   for (let i = 0; i < 70; i++) part({ x: gx + rand(-60, 60), y: FH / 2 + rand(-160, 160), z: rand(40, 160), vx: rand(-300, 300), vy: rand(-300, 300), vz: rand(200, 700), g: 500, life: rand(1.5, 3), max: 3, size: rand(5, 9), color: pick(['#ff6b6b', '#ffd43b', '#4dabf7', '#51cf66', '#f783ac', '#ffffff', team.kit]), kind: 'confetti', rot: rand(0, TAU), vr: rand(-12, 12), drag: 1.5 });
@@ -1206,6 +1208,7 @@ function launchSuper() {
   b.super = { type: c.type, name: c.name, S, E, L, D: Math.max(0.55, D), t: 0, saved: Math.random() < pSave, by: p, team: T, keeper: O.keeper, resolved: false, side: Math.random() < 0.5 ? -1 : 1, realIdx: randi(0, 2), prevK: 0, decoys: [] };
   b.lastTouch = p; b.owner = null; b.shot = { team: T, by: p, speed: 1500, t: 0 };
   SFX.superFire(); shake(16); flash(0.4, T.kit2);
+  if (p.human) Input.rumble(p.human, 600, 1, 1);
   if (c.type === 'dance') {
     for (const o of [...O.players, O.keeper]) if (isUp(o) && (o.role === 'keeper' || dist(o.x, o.y, p.x, p.y) < 650)) { o.state = 'dance'; o.stateT = 2.6; o.expr = 'happy'; }
     SFX.tone(523, 0.2, 'square', 0.1); SFX.tone(659, 0.2, 'square', 0.1, null, 0.15); SFX.tone(784, 0.3, 'square', 0.1, null, 0.3);
@@ -1263,8 +1266,8 @@ function updateSuper(dt) {
   if (s.blink) s.blink -= dt;
   // style particles
   const st = SUPER_STYLE[s.type];
-  const col = { boulder: ['#ff6a00', '#ffd43b'], electric: ['#fff35c', '#ffffff'], yarn: ['#ff7ec8', '#ffd1ec'], fire: ['#ff6a00', '#ffd43b', '#ff2200'], quantum: ['#66ff99', '#00e5ff'], steam: ['#ffffff', '#e6f2ff'], disco: ['#ff6bd5', '#7cf3ff', '#fff36b', '#a3ff6b'], cannon: ['#555', '#999'] }[st];
-  for (let i = 0; i < 2; i++) part({ x: b.x + rand(-6, 6), y: b.y + rand(-6, 6), z: b.z + rand(-6, 6), vz: rand(10, 60), life: 0.5, max: 0.5, size: rand(5, 12), color: pick(col), kind: st === 'steam' || st === 'cannon' ? 'smoke' : st === 'disco' ? 'star' : 'flame' });
+  const col = { bus: ['#777', '#999', '#ffcc00'], electric: ['#fff35c', '#ffffff'], jollof: ['#e4572e', '#ffd7a8'], fire: ['#ff6a00', '#ffd43b', '#ff2200'], quantum: ['#66ff99', '#00e5ff'], steam: ['#ffffff', '#e6f2ff'], disco: ['#ff6bd5', '#7cf3ff', '#fff36b', '#a3ff6b'], cannon: ['#555', '#999'] }[st];
+  for (let i = 0; i < 2; i++) part({ x: b.x + rand(-6, 6), y: b.y + rand(-6, 6), z: b.z + rand(-6, 6), vz: rand(10, 60), life: 0.5, max: 0.5, size: rand(5, 12), color: pick(col), kind: st === 'steam' || st === 'cannon' || st === 'bus' ? 'smoke' : st === 'disco' ? 'star' : 'flame' });
   if (s.type === 'boulder') shake(3);
   // split decoys
   if (s.type === 'split') {
@@ -1595,23 +1598,23 @@ function updateHazards(dt, frozenPlay) {
         if (!b.owner && !b.super && b.z < 30 && dist(b.x, b.y, h.x, h.y) < BALL_R + 18) { b.vx = h.vx * 1.4 + rand(-200, 200); b.vy = h.vy * 1.4; b.vz = 180; SFX.penguin(); }
         break;
       }
-      case 'cow': {
+      case 'animal': {
         // states: enter -> graze -> leave
         if (h.phase === 'enter') { const d = seekPt(h, h.tx, h.ty, 70, dt); if (d < 8) { h.phase = 'graze'; h.gt = rand(9, 14); } }
-        else if (h.phase === 'graze') { h.gt -= dt; if (Math.random() < dt * 0.25) { SFX.moo(); floatText(h.x, h.y, 70, 'MOO', '#fff', 24); } if (h.gt <= 0) { h.phase = 'leave'; h.tx = h.x; h.ty = h.y < FH / 2 ? -120 : FH + 120; } }
+        else if (h.phase === 'graze') { h.gt -= dt; if (Math.random() < dt * 0.25) { SFX.animal(h.emoji); floatText(h.x, h.y, 90, animalWord(h.emoji), '#fff', 24); } if (h.gt <= 0) { h.phase = 'leave'; h.tx = h.x; h.ty = h.y < FH / 2 ? -120 : FH + 120; } }
         else { seekPt(h, h.tx, h.ty, 90, dt); if (h.y < -100 || h.y > FH + 100) dead = true; }
         // obstacle
         for (const p of M.all) {
           if (p.state === 'abducted' || p.z > 40) continue;
-          const d = dist(p.x, p.y, h.x, h.y), m = p.r + 38;
-          if (d < m && d > 0) { const nx = (p.x - h.x) / d, ny = (p.y - h.y) / d; p.x = h.x + nx * m; p.y = h.y + ny * m; if (p.state === 'down' && Math.hypot(p.vx, p.vy) > 250) { p.vx = nx * 300; p.vy = ny * 300; SFX.moo(); } }
+          const d = dist(p.x, p.y, h.x, h.y), m = p.r + h.r;
+          if (d < m && d > 0) { const nx = (p.x - h.x) / d, ny = (p.y - h.y) / d; p.x = h.x + nx * m; p.y = h.y + ny * m; if (p.state === 'down' && Math.hypot(p.vx, p.vy) > 250) { p.vx = nx * 300; p.vy = ny * 300; SFX.animal(h.emoji); } }
         }
         if (!b.owner && !b.super && b.z < 60) {
-          const d = dist(b.x, b.y, h.x, h.y), m = BALL_R + 38;
+          const d = dist(b.x, b.y, h.x, h.y), m = BALL_R + h.r;
           if (d < m && d > 0) {
             const nx = (b.x - h.x) / d, ny = (b.y - h.y) / d, vn = b.vx * nx + b.vy * ny;
             b.x = h.x + nx * m; b.y = h.y + ny * m;
-            if (vn < 0) { b.vx -= 1.8 * vn * nx; b.vy -= 1.8 * vn * ny; if (-vn > 400) { SFX.moo(); floatText(h.x, h.y, 80, 'MOOO!', '#fff', 28); b.shot = null; } }
+            if (vn < 0) { b.vx -= 1.8 * vn * nx; b.vy -= 1.8 * vn * ny; if (-vn > 400) { SFX.animal(h.emoji); floatText(h.x, h.y, 100, animalWord(h.emoji), '#fff', 28); b.shot = null; } }
           }
         }
         break;
@@ -1621,6 +1624,8 @@ function updateHazards(dt, frozenPlay) {
     if (dead) M.hazards.splice(i, 1);
   }
 }
+const ANIMAL_R = { '🐘': 54, '🦒': 36, '🦓': 32, '🐪': 42, '🐫': 42 };
+function animalWord(e) { return { '🐘': 'PAWOOOO!', '🦒': 'HMPH.', '🦓': 'NEIGH!', '🐪': 'HRRMPH!', '🐫': 'GRRUMPH!' }[e] || 'MOO!'; }
 function seekPt(h, tx, ty, spd, dt) {
   const dx = tx - h.x, dy = ty - h.y, d = Math.hypot(dx, dy);
   if (d > 1) { h.x += dx / d * Math.min(spd * dt, d); h.y += dy / d * Math.min(spd * dt, d); h.flip = dx < 0; }
@@ -1628,6 +1633,11 @@ function seekPt(h, tx, ty, spd, dt) {
 }
 function spawnHazard(kind) {
   const b = M.ball;
+  if (kind === 'lightning' && Math.random() < 0.35) {
+    M.blackout = 4.5; SFX.powerDown(); say(COMMENTARY.hazard.blackout, {}, 2);
+    floatText(b.x, b.y, 140, 'NEPA TOOK LIGHT!', '#ffe066', 34, 1.6);
+    return;
+  }
   if (kind === 'lightning' || kind === 'meteor') {
     const n = randi(1, 3);
     for (let i = 0; i < n; i++) {
@@ -1639,12 +1649,13 @@ function spawnHazard(kind) {
     const n = randi(2, 5), fromTop = Math.random() < 0.5, x0 = rand(250, FW - 250);
     for (let i = 0; i < n; i++) M.hazards.push({ type: 'penguin', x: x0 + i * rand(40, 70) - n * 25, y: fromTop ? -40 - i * 50 : FH + 40 + i * 50, vx: rand(-40, 40), vy: (fromTop ? 1 : -1) * rand(420, 520) });
     SFX.penguin(); say(COMMENTARY.hazard.penguin, {}, 1);
-  } else if (kind === 'cow') {
-    if (M.hazards.filter(h => h.type === 'cow').length >= 2) return;
+  } else if (kind === 'animals') {
+    if (M.hazards.filter(h => h.type === 'animal').length >= 2) return;
     const fromTop = Math.random() < 0.5;
     const tx = rand(350, FW - 350), ty = rand(220, FH - 220);
-    M.hazards.push({ type: 'cow', x: tx + rand(-200, 200), y: fromTop ? -80 : FH + 80, tx, ty, phase: 'enter', flip: false });
-    SFX.moo(); say(COMMENTARY.hazard.cow, {}, 1);
+    const emoji = pick(M.stadium.animals || ['🐘']);
+    M.hazards.push({ type: 'animal', emoji, r: ANIMAL_R[emoji] || 38, x: tx + rand(-200, 200), y: fromTop ? -80 : FH + 80, tx, ty, phase: 'enter', flip: false });
+    SFX.animal(emoji); say(COMMENTARY.hazard.animals, {}, 1);
   } else if (kind === 'ufo') {
     if (M.hazards.some(h => h.type === 'ufo')) return;
     const cands = M.outfield.filter(p => isUp(p) && p.state !== 'abducted');

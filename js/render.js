@@ -34,7 +34,7 @@ function renderMatch(c) {
     for (const s of _stars) { c.globalAlpha = 0.4 + 0.4 * Math.sin(M.time * 2 + s.p); circle(c, s.x * VW, s.y * VH, s.s, '#fff'); }
     c.globalAlpha = 1;
   }
-  if (S.id === 'volcano') {
+  if (S.id === 'goma') {
     // glowing volcano silhouette
     const vy = PY(-330, 300);
     c.fillStyle = '#2b0d06'; c.beginPath(); c.moveTo(PX(FW * 0.2), vy + 200); c.lineTo(PX(FW * 0.45), vy - 40); c.lineTo(PX(FW * 0.55), vy - 40); c.lineTo(PX(FW * 0.8), vy + 200); c.fill();
@@ -42,21 +42,45 @@ function renderMatch(c) {
     lg.addColorStop(0, 'rgba(255,140,0,0.8)'); lg.addColorStop(1, 'rgba(255,60,0,0)');
     c.fillStyle = lg; c.fillRect(0, 0, VW, VH);
   }
-  if (S.id === 'cosmo') {
+  if (S.id === 'afronaut') {
+    // rocket on the launchpad
+    const rx = PX(FW * 0.18, 0), ry = PY(-420, 200);
+    c.fillStyle = '#e8e8f0'; rrect(c, rx - 14 * CZ, ry - 90 * CZ, 28 * CZ, 90 * CZ, 12 * CZ); c.fill();
+    c.fillStyle = '#198a00'; c.fillRect(rx - 14 * CZ, ry - 50 * CZ, 28 * CZ, 8 * CZ); c.fillStyle = '#ef7d00'; c.fillRect(rx - 14 * CZ, ry - 42 * CZ, 28 * CZ, 8 * CZ);
+    c.fillStyle = '#de2010'; c.beginPath(); c.moveTo(rx - 14 * CZ, ry - 80 * CZ); c.lineTo(rx, ry - 115 * CZ); c.lineTo(rx + 14 * CZ, ry - 80 * CZ); c.fill();
     // planet
     const px = PX(FW * 0.78, 0), py = PY(-500, 200);
     circle(c, px, py, 120 * CZ, '#6b4cc9'); c.save(); c.beginPath(); c.arc(px, py, 120 * CZ, 0, TAU); c.clip();
     circle(c, px + 40 * CZ, py - 30 * CZ, 120 * CZ, '#8a6ff0'); c.restore();
     c.strokeStyle = 'rgba(200,180,255,0.6)'; c.lineWidth = 6 * CZ; c.beginPath(); c.ellipse(px, py, 190 * CZ, 34 * CZ, -0.25, 0, TAU); c.stroke();
   }
-  if (S.id === 'meadow' || S.id === 'frost') {
+  if (S.id === 'mara' || S.id === 'sahara') {
+    // the big African sun + skyline
+    const sx = VW * 0.75, sy = PY(-330, 250);
+    const sg = c.createRadialGradient(sx, sy, 10, sx, sy, 140 * CZ);
+    sg.addColorStop(0, 'rgba(255,240,180,1)'); sg.addColorStop(0.35, 'rgba(255,170,60,0.9)'); sg.addColorStop(1, 'rgba(255,140,40,0)');
+    c.fillStyle = sg; c.beginPath(); c.arc(sx, sy, 140 * CZ, 0, TAU); c.fill();
+    const base = PY(-260, 230);
+    if (S.id === 'mara') {
+      for (let i = 0; i < 5; i++) { // acacia silhouettes
+        const ax = ((i * 331) % VW) + 40, ay = base - 6;
+        c.fillStyle = '#3b2a14'; c.fillRect(ax - 2, ay - 50 * CZ, 4, 50 * CZ);
+        c.beginPath(); c.ellipse(ax, ay - 52 * CZ, 48 * CZ, 11 * CZ, 0, 0, TAU); c.fill();
+      }
+    } else {
+      c.fillStyle = '#d9a35a';
+      c.beginPath(); c.moveTo(0, base); for (let i = 0; i <= 8; i++) c.quadraticCurveTo((i - 0.5) / 8 * VW, base - (i % 2 ? 70 : 20) * CZ, i / 8 * VW, base - 10 * CZ); c.lineTo(VW, base + 40); c.lineTo(0, base + 40); c.fill();
+      for (let i = 0; i < 3; i++) { const px = VW * (0.2 + i * 0.12), py = base - 8 * CZ, ph = (60 - i * 12) * CZ; c.fillStyle = '#c48a43'; c.beginPath(); c.moveTo(px - ph, py); c.lineTo(px, py - ph); c.lineTo(px + ph, py); c.fill(); }
+    }
+  }
+  if (S.id === 'kili') {
     // fluffy clouds / mountains
-    c.fillStyle = S.id === 'frost' ? '#f4fbff' : '#ffffff';
+    c.fillStyle = '#f4fbff';
     for (let i = 0; i < 5; i++) {
       const x = ((i * 397 + M.time * 8) % (VW + 300)) - 150, y = 30 + (i % 3) * 30;
       circle(c, x, y, 26, c.fillStyle); circle(c, x + 26, y + 6, 22, c.fillStyle); circle(c, x - 24, y + 8, 18, c.fillStyle);
     }
-    if (S.id === 'frost') {
+    {
       c.fillStyle = '#9fc9e6'; c.beginPath(); c.moveTo(0, PY(-260, 230));
       for (let i = 0; i <= 10; i++) c.lineTo(i / 10 * VW, PY(-260, 230) - (i % 2 ? 90 : 20) * CZ);
       c.lineTo(VW, PY(-260, 230)); c.fill();
@@ -115,7 +139,7 @@ function renderMatch(c) {
   for (const bx of M.boxes) D.push({ y: bx.y, f: () => drawBox(c, bx) });
   for (const q of M.projectiles) D.push({ y: q.y, f: () => drawProjectile(c, q) });
   for (const h of M.hazards) {
-    if (h.type === 'cow') D.push({ y: h.y, f: () => drawEmoji(c, '🐄', PX(h.x), PY(h.y, 36 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), 92 * CZ, !h.flip) });
+    if (h.type === 'animal') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x), PY(h.y, h.r * 1.0 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), h.r * 2.5 * CZ, !h.flip) });
     if (h.type === 'penguin') D.push({ y: h.y, f: () => drawEmoji(c, '🐧', PX(h.x), PY(h.y, 18), 46 * CZ, false, h.vy > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) });
   }
   D.push({ y: GY1, f: () => { drawGoalFront(c, 0); drawGoalFront(c, 1); } });
@@ -137,6 +161,15 @@ function renderMatch(c) {
   // overhead labels (bubbles, player tags) on top of everything
   for (const p of M.all) if (!p.hidden) drawPlayerOverlay(c, p);
 
+  if (M.blackout > 0) {
+    const a = Math.min(1, M.blackout * 2, (4.5 - M.blackout) * 4) * 0.86;
+    c.save(); c.globalAlpha = a; c.fillStyle = '#02030a'; c.fillRect(0, 0, VW, VH); c.restore();
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const p of M.all) if (!p.hidden) { const x = PX(p.x), y = PY(p.y) - 28 * CZ; ellipse(c, x, y + 10 * CZ, 10 * CZ, 4 * CZ, 'rgba(255,255,255,0.5)'); circle(c, x - 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); circle(c, x + 5 * CZ, y - 20 * CZ, 2.5 * CZ, '#fff'); }
+    circle(c, PX(M.ball.x, M.ball.z), PY(M.ball.y, M.ball.z) - BALL_R * CZ, BALL_R * CZ * 1.4, 'rgba(255,255,160,0.8)');
+    c.restore();
+    text(c, '💡 NEPA TOOK LIGHT! 💡', VW / 2, VH * 0.22, 28 * Math.min(VW / 1280, VH / 720), '#ffe066', 'center', '#000', 5);
+  }
   if (M.flash > 0) { c.globalAlpha = Math.min(0.85, M.flash); c.fillStyle = M.flashCol; c.fillRect(0, 0, VW, VH); c.globalAlpha = 1; }
   if (M.phase === 'cine') {
     // vignette + speed lines
@@ -187,11 +220,11 @@ function drawPitch(c) {
   c.fillStyle = shade(S.grassA, -0.15);
   c.fillRect(PX(-GOAL_D - 40), y0, PX(0) - PX(-GOAL_D - 40), y1 - y0);
   c.fillRect(PX(FW), y0, PX(FW + GOAL_D + 40) - PX(FW), y1 - y0);
-  if (S.id === 'frost') { // ice sheen
+  if (S.id === 'kili') { // ice sheen
     c.fillStyle = 'rgba(255,255,255,0.25)';
     for (let i = 0; i < 6; i++) { c.beginPath(); c.moveTo(PX(i * 320 + 40), y0); c.lineTo(PX(i * 320 + 120), y0); c.lineTo(PX(i * 320 - 60), y1); c.lineTo(PX(i * 320 - 140), y1); c.fill(); }
   }
-  if (S.id === 'cosmo') { // grid glow
+  if (S.id === 'afronaut') { // grid glow
     c.strokeStyle = 'rgba(120,255,230,0.08)'; c.lineWidth = 1;
     for (let x = 0; x <= FW; x += 100) { c.beginPath(); c.moveTo(PX(x), y0); c.lineTo(PX(x), y1); c.stroke(); }
     for (let y = 0; y <= FH; y += 100) { c.beginPath(); c.moveTo(PX(0), PY(y)); c.lineTo(PX(FW), PY(y)); c.stroke(); }
@@ -208,7 +241,7 @@ function drawPitch(c) {
     c.beginPath(); c.ellipse(PX(gx + dir * 250), PY(FH / 2), 80 * CZ, 80 * CZ * TILT, 0, sd ? Math.PI / 2 : -Math.PI / 2, sd ? Math.PI * 1.5 : Math.PI / 2); c.stroke();
     circle(c, PX(gx + dir * 180), PY(FH / 2), 3.5 * CZ, S.line);
   }
-  c.save(); c.globalAlpha = 0.14; text(c, 'MAYHEM CUP', PX(FW / 2), PY(FH / 2), 46 * CZ, '#fff', 'center', null); c.restore();
+  c.save(); c.globalAlpha = 0.14; text(c, GAME_NAME, PX(FW / 2), PY(FH / 2), 46 * CZ, '#fff', 'center', null); c.restore();
 }
 
 function drawWallsBack(c) {
@@ -247,11 +280,12 @@ function drawWallFront(c) {
   quad(c, [P3(xa, FH, 0), P3(xb, FH, 0), P3(xb, FH, WALL_H * 0.5), P3(xa, FH, WALL_H * 0.5)], S.wallDark);
   quad(c, [P3(xa, FH, WALL_H * 0.5 - 4), P3(xb, FH, WALL_H * 0.5 - 4), P3(xb, FH, WALL_H * 0.5), P3(xa, FH, WALL_H * 0.5)], S.wall);
   c.globalAlpha = 1;
-  if (S.wallFx === 'hay') for (let x = -40; x < FW + 40; x += 140) {
-    const [px, py] = P3(x + 70, FH + 10, 0);
-    c.fillStyle = '#e9c46a'; rrect(c, px - 55 * CZ, py - 28 * CZ, 110 * CZ, 30 * CZ, 6 * CZ); c.fill();
-    c.strokeStyle = '#b8902f'; c.lineWidth = 2; c.stroke();
+  if (S.wallFx === 'hay') for (let x = -40; x < FW + 40; x += 120) { // thorn bushes
+    const [px, py] = P3(x + 60, FH + 10, 0);
+    for (let k = 0; k < 4; k++) circle(c, px + (k - 1.5) * 22 * CZ, py - (14 + (k % 2) * 8) * CZ, 20 * CZ, k % 2 ? '#5f6b2a' : '#4a5520');
+    c.strokeStyle = '#2b2f12'; c.lineWidth = 1.5; for (let k = 0; k < 6; k++) { c.beginPath(); c.moveTo(px + (k - 3) * 14 * CZ, py - 20 * CZ); c.lineTo(px + (k - 3) * 14 * CZ + 6, py - 34 * CZ); c.stroke(); }
   }
+  if (S.wallFx === 'sand') for (let x = -40; x < FW + 60; x += 110) { const [px, py] = P3(x, FH + 8, 0); ellipse(c, px, py - 8 * CZ, 66 * CZ, 22 * CZ, '#e9c98b'); ellipse(c, px - 10 * CZ, py - 14 * CZ, 40 * CZ, 10 * CZ, '#f5deb3'); }
   if (S.wallFx === 'snow') for (let x = -40; x < FW + 60; x += 90) { const [px, py] = P3(x, FH + 8, 0); ellipse(c, px, py - 6 * CZ, 52 * CZ, 16 * CZ, '#ffffff'); }
 }
 
@@ -303,7 +337,7 @@ function drawPlayerEnt(c, p) {
   if (p.state === 'dive') o.expr = 'grit';
   if (p.fx.mega > 0) { c.save(); c.globalAlpha = 0.3; circle(c, x, y - 36 * s, 44 * s, `hsl(${(M.time * 400) % 360},100%,60%)`); c.restore(); }
   drawCharacter(c, o, x, y, s);
-  if (p.fx.snow > 0 && p.state !== 'down') { ellipse(c, x, y - 64 * s, 16 * s, 9 * s, '#ffffff', '#cde', 1); circle(c, x - 2 * s, y - 72 * s, 7 * s, '#fff'); }
+  if (p.fx.snow > 0 && p.state !== 'down') { const sc = M.stadium.wallFx === 'sand' ? '#e2bf7c' : '#ffffff'; ellipse(c, x, y - 64 * s, 16 * s, 9 * s, sc, '#cba', 1); circle(c, x - 2 * s, y - 72 * s, 7 * s, sc); }
   if (p.state === 'down' && p.z <= 5) {
     for (let i = 0; i < 3; i++) {
       const a = M.time * 6 + i * TAU / 3;
@@ -357,7 +391,7 @@ function drawBallTrail(c) {
   const b = M.ball, tr = b.trail;
   if (tr.length < 2) return;
   const st = b.super ? SUPER_STYLE[b.super.type] : 'normal';
-  const col = { boulder: '255,120,0', electric: '255,243,92', yarn: '255,126,200', fire: '255,90,0', quantum: '102,255,153', steam: '230,242,255', disco: `${(M.time * 300) % 255 | 0},200,255`, cannon: '80,80,80', normal: '255,255,255' }[st];
+  const col = { bus: '150,150,150', electric: '255,243,92', jollof: '228,87,46', fire: '255,90,0', quantum: '102,255,153', steam: '230,242,255', disco: `${(M.time * 300) % 255 | 0},200,255`, cannon: '80,80,80', normal: '255,255,255' }[st];
   const base = BALL_R * CZ * (b.super ? (SUPER_SIZE[b.super.type] || 1) : 1);
   c.lineCap = 'round';
   for (let i = 1; i < tr.length; i++) {
@@ -377,9 +411,9 @@ function drawBallEnt(c) {
   const sz = BALL_R * CZ * (s ? (SUPER_SIZE[s.type] || 1) : 1);
   const sp = Math.hypot(b.vx, b.vy);
   const st = s ? SUPER_STYLE[s.type] : (sp > 1150 && !b.owner ? 'fire' : 'normal');
-  if (s && s.type === 'split') for (const d of s.decoys) drawBall(c, PX(d.x, d.z), PY(d.y, d.z), sz, b.rot, 'yarn', M.time);
+  if (s && s.type === 'split') for (const d of s.decoys) drawBall(c, PX(d.x, d.z), PY(d.y, d.z), sz, b.rot, 'jollof', M.time);
   drawBall(c, PX(b.x, b.z), PY(b.y, b.z) - sz, sz, b.rot, st, M.time);
-  if (s && s.type === 'curve') drawEmoji(c, '☕', PX(b.x, b.z) + sz * 1.2, PY(b.y, b.z) - sz * 2.4, sz * 1.6);
+  if (s && s.type === 'curve') drawEmoji(c, '🫖', PX(b.x, b.z) + sz * 1.2, PY(b.y, b.z) - sz * 2.4, sz * 1.6);
 }
 function drawBox(c, bx) {
   const x = PX(bx.x, bx.z + 22), y = PY(bx.y, bx.z + 22 + Math.sin(M.time * 4 + bx.x) * 4), s = CZ;
