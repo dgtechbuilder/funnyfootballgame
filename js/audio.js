@@ -142,6 +142,9 @@ const SFX = {
       o.connect(f); f.connect(g); g.connect(this.sfx); o.start(st); o.stop(st + dur + 0.05);
     }
   },
+  honk() { // danfo bus horn: two-tone 'HONK HONK'
+    for (const d of [0, 0.28]) { this.tone(330, 0.22, 'square', 0.16, null, d); this.tone(415, 0.22, 'square', 0.12, null, d); this.tone(165, 0.22, 'sawtooth', 0.1, null, d); }
+  },
   powerDown() { this.tone(400, 1.2, 'sawtooth', 0.15, 40); this.noise(0.4, 0.2, 'lowpass', 800, 100); },
   pickup() { [660, 880, 1320].forEach((f, i) => this.tone(f, 0.09, 'square', 0.1, null, i * 0.06)); },
   item() { this.tone(400, 0.25, 'square', 0.12, 1600); this.tone(800, 0.2, 'triangle', 0.1, 2400, 0.05); },
