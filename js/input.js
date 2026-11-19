@@ -139,8 +139,8 @@ function readHat(v) { // DirectInput POV hat packed in one axis: -1..1 in 8 step
   return HAT_DIRS[clamp(Math.round((v + 1) / (2 / 7)), 0, 7)];
 }
 let PAD_MAPS = {};
-try { PAD_MAPS = JSON.parse(localStorage.getItem('jollof-padmaps') || '{}') || {}; } catch (e) { PAD_MAPS = {}; }
-function savePadMaps() { try { localStorage.setItem('jollof-padmaps', JSON.stringify(PAD_MAPS)); } catch (e) { /* ignore */ } }
+try { PAD_MAPS = JSON.parse(localStorage.getItem('monate-padmaps') || localStorage.getItem('jollof-padmaps') || '{}') || {}; } catch (e) { PAD_MAPS = {}; }
+function savePadMaps() { try { localStorage.setItem('monate-padmaps', JSON.stringify(PAD_MAPS)); } catch (e) { /* ignore */ } }
 // a bind is {b: buttonIndex} or {a: axisIndex, s: sign} or {a, hat: value}
 function bindValue(gp, bind) {
   if (!bind) return 0;

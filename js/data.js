@@ -1,9 +1,10 @@
 // ============================================================================
-//  JOLLOF CUP — game data: captains, stadiums, items, commentary
+//  MONATE CUP — game data: captains, stadiums, items, commentary
 //  Africa's most ridiculous football tournament.
 // ============================================================================
 
-const GAME_NAME = 'JOLLOF CUP';
+const GAME_NAME = 'MONATE CUP';
+const GAME_MEANING = '"Monate" means fun in Sesotho, Setswana & Sepedi';
 const GAME_TAGLINE = "AFRICA'S MOST RIDICULOUS FOOTBALL TOURNAMENT";
 
 const CAPTAINS = [
@@ -24,12 +25,12 @@ const CAPTAINS = [
     quips: ['TOO FAST!', 'SAWA SAWA!', 'CATCH ME IF YOU CAN!', 'POLE POLE? NEVER!'],
   },
   {
-    id: 'ama', name: 'Auntie Ama Jollof', short: 'Auntie Ama', nick: 'Queen of Makola Market', country: 'Ghana', flag: '🇬🇭',
+    id: 'ama', name: 'Auntie Ama Makola', short: 'Auntie Ama', nick: 'Queen of Makola Market', country: 'Ghana', flag: '🇬🇭',
     team: 'Black Star Bandits', color: '#1b8a3c', alt: '#0c4a1f', color2: '#fcd116', skin: '#6b4226',
     speed: 0.96, power: 1.12, tackle: 1.25, size: 0.95,
-    superType: 'split', superName: 'JOLLOF TRIPLE THREAT', sidekickHat: 'headwrap',
-    blurb: 'Her jollof is the best in Africa and she will fight you about it. Carries a wooden spoon. Uses it.',
-    quips: ['MY JOLLOF IS BETTER!', 'AH! YOU THINK?!', 'CHALE!', 'COME AND CHOP!'],
+    superType: 'split', superName: 'MARKET DAY MADNESS', sidekickHat: 'headwrap',
+    blurb: 'Runs the busiest stall in Makola Market and haggles with referees. Carries a wooden spoon. Uses it.',
+    quips: ['AH! YOU THINK?!', 'CHALE!', 'COME AND CHOP!', 'NO DISCOUNT!'],
   },
   {
     id: 'hamada', name: 'Uncle Hamada', short: 'Hamada', nick: 'The Pharaoh of the Penalty Box', country: 'Egypt', flag: '🇪🇬',
@@ -137,12 +138,12 @@ const KEEPER_FAIL_WORDS = ['CHAI...', 'BUTTERFINGERS', 'MY BAD', 'EISH', 'I BLIN
 const SPONSORS = ['SUYA & SONS', 'MAMA PUT DINER', 'UP NEPA!', 'FUFU FUEL', 'UGALI BANK', 'KENKEY KINGS', 'DANFO TRANSPORT', 'INJERA INSURANCE', 'PEPPER SOUP CO.', 'CHAPATI EXPRESS', 'OGA TELECOM', 'PUFF-PUFF PALACE'];
 
 const COMMENTARY = {
-  kickoff: ['Here we go! Let the wahala begin!', 'And we\'re off! Hold your jollof tight!', 'Kick off! The physio is already warming up.', 'The whistle blows. Somewhere, a referee is praying.'],
+  kickoff: ['Here we go! Let the wahala begin!', 'And we\'re off! Hold on to your hats!', 'Kick off! The physio is already warming up.', 'The whistle blows. Somewhere, a referee is praying.'],
   goal: [
     'GOOOOOAAAAL! {p} has disgraced that net!',
     '{p} SCORES! The keeper is checking flights out of the country!',
     'GOAL! Somebody bring that net some pepper soup!',
-    'WHAT A STRIKE FROM {p}! I spilled my jollof! ALL of my jollof!',
+    'WHAT A STRIKE FROM {p}! I spilled my drink! ALL of my drink!',
     'GOAL for {t}! Chai! The keeper\'s mother is watching!',
     '{p}! YOU BEAUTIFUL MADNESS!',
     'IT\'S IN! {o} are shaking like a danfo on a pothole!',
@@ -181,7 +182,7 @@ const COMMENTARY = {
     ufo: ['{v} has been ABDUCTED BY ALIENS! Is that a foul?!', 'Aliens have taken {v}! Probably for science.'],
   },
   golden: ['GOLDEN GOAL! Next goal wins! No pressure! LOADS of pressure!'],
-  fulltime: ['That\'s full time! Somebody call an ambulance. Several, actually.', 'FULL TIME! What a match! I need jollof and a lie down.'],
+  fulltime: ['That\'s full time! Somebody call an ambulance. Several, actually.', 'FULL TIME! What a match! That was MONATE!'],
   idle: ['The crowd are going wild!', 'The vuvuzelas are deafening!', 'Health and safety have left the stadium.', 'The referee appears to be hiding behind the suya stand.', 'Somebody\'s mama is going to be furious.', 'This match has more drama than Nollywood!'],
 };
 
