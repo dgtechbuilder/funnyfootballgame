@@ -1,6 +1,8 @@
-# 🍛⚽ JOLLOF CUP: Africa's Most Ridiculous Football Tournament
+# ⚽🏆 MONATE CUP: Africa's Most Ridiculous Football Tournament
 
-A chaotic, arcade-style football game for 1–6 players, playable in the browser. Teams are 4 players plus a goalkeeper, led by larger-than-life captains from across Africa.
+*"Monate" means fun (also nice, enjoyable) in Sesotho, Setswana and Sepedi.*
+
+A chaotic, arcade-style football game for 1–6 players, playable in the browser. Teams are 4 players plus a goalkeeper, led by larger-than-life captains from across Africa. The characters are chunky, rounded-block figures in the spirit of Roblox avatars, but softer and less boxy.
 
 Everything is drawn and synthesized in code, including the Afrobeats / amapiano soundtrack and the vuvuzelas. There are no image or audio assets and no build step.
 
@@ -61,7 +63,7 @@ Custom mappings are saved in your browser for that controller. Rumble feedback o
 |---|---|---|
 | Oga Dayo Danfo | 🇳🇬 Nigeria | **Danfo Dash:** the ball becomes a yellow Lagos bus |
 | Kip "The Wind" Kiprotich | 🇰🇪 Kenya | **Rift Valley Lightning:** zig-zag lightning |
-| Auntie Ama Jollof | 🇬🇭 Ghana | **Jollof Triple Threat:** splits into three balls of jollof |
+| Auntie Ama Makola | 🇬🇭 Ghana | **Market Day Madness:** splits into three balls, and only one is real |
 | Uncle Hamada | 🇪🇬 Egypt | **Pyramid Punt:** drops from the sky |
 | Doctor Wahala | 🇨🇲 Cameroon | **Wahala Warp:** teleports |
 | Madame Fatou Ataya | 🇸🇳 Senegal | **Ataya Twister:** a huge curve with a teapot |
