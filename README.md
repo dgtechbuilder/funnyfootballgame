@@ -33,6 +33,16 @@ Every menu is fully clickable: buttons, captains, stadiums and option arrows. Cl
 
 `Esc` / `P` / Start pauses the game, `N` mutes and `M` toggles the music.
 
+### Controllers in the browser
+
+Yes, controllers work in web games, through the browser's Gamepad API. A few things to know:
+
+- **Press a button first.** Browsers hide controllers until you press a button on them, for privacy reasons. After that the game picks the controller up and **automatically puts it on a team**. A second controller joins the other team, and a controller woken up mid-match joins straight away.
+- **Use Chrome or Edge for the best support.** Firefox and Safari also work, using the game's built-in layouts for non-standard controllers.
+- **Open the game in its own tab** (https:// or a local file). Embedded frames can block controllers.
+- **Windows:** fake "virtual controllers" (Steam Input, vJoy, some RGB keyboards and headsets) are ignored, and real controllers always get a player slot.
+- **Still not working?** Open **🎮 CONTROLLERS**. It shows each controller's raw buttons and sticks exactly as the browser reports them. If nothing appears there, the browser can't see the controller. If buttons show up but do the wrong thing, use **REMAP**.
+
 ### Supported controllers
 
 Up to 4 controllers plus 2 keyboard players can play at once. The game detects the controller family and shows that controller's own button labels:

@@ -125,6 +125,7 @@ function padFamily(id) {
 // face = [bottom, right, left, top]
 const RAW_PROFILES = {
   xbox:     { face: [0, 1, 2, 3], start: [7, 9], shoulder: [4, 5], trig: [6, 7], trigAxes: [2, 5] },
+  xboxBT:   { face: [0, 1, 3, 4], start: [11], shoulder: [6, 7], trig: [8, 9], trigAxes: [5, 4] },
   steam:    { face: [0, 1, 2, 3], start: [7, 9], shoulder: [4, 5], trig: [6, 7], trigAxes: [2, 5] },
   mobile:   { face: [0, 1, 2, 3], start: [9, 7], shoulder: [4, 5], trig: [6, 7] },
   ps:       { face: [1, 2, 0, 3], start: [9], shoulder: [4, 5], trig: [6, 7] },
@@ -187,7 +188,7 @@ const Input = {
   rumbleOn: true,
   rumble(id, ms = 150, strong = 0.5, weak = 0.5) {
     if (!this.rumbleOn || !id || !id.startsWith('pad')) return;
-    const gp = (navigator.getGamepads ? navigator.getGamepads() : [])[+id.slice(3)];
+    const gp = this.padFor(id);
     if (!gp) return;
     try {
       if (gp.vibrationActuator && gp.vibrationActuator.playEffect) gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak }).catch(() => {});
@@ -196,7 +197,27 @@ const Input = {
   },
   rumbleAll(ms, s, w) { for (const id of this.order) if (this.devices[id].kind === 'pad' && this.devices[id].connected) this.rumble(id, ms, s, w); },
   onConnect: null,
-  rawPads() { return navigator.getGamepads ? navigator.getGamepads() : []; },
+  rawPads() { try { return navigator.getGamepads ? Array.from(navigator.getGamepads()) : []; } catch (e) { return []; } },
+  // Map browser gamepads onto our 4 player slots. Browsers can hand out any index (virtual devices,
+  // reconnects), so real controllers simply take the first free slot and keep it until unplugged.
+  slotOf: {}, // gamepad.index -> slot
+  slotPads() {
+    const all = this.rawPads().filter(g => g && g.connected && g.buttons && g.buttons.length >= 4);
+    const live = new Set(all.map(g => g.index));
+    for (const k in this.slotOf) if (!live.has(+k)) delete this.slotOf[k];
+    const out = [null, null, null, null];
+    for (const g of all) if (this.slotOf[g.index] !== undefined) out[this.slotOf[g.index]] = g;
+    for (const g of all) {
+      if (this.slotOf[g.index] !== undefined) continue;
+      const free = out.indexOf(null);
+      if (free < 0) break;
+      this.slotOf[g.index] = free; out[free] = g;
+    }
+    this.extraPads = Math.max(0, all.length - 4);
+    return out;
+  },
+  padFor(id) { return this.slotPads()[+id.slice(3)] || null; },
+  anyPadPressed(id) { const d = this.devices[id]; return d && d.connected && BTN_NAMES.some(b => d[b].pressed); },
 
   _setBtn(b, isDown) { b.pressed = isDown && !b.down; b.released = !isDown && b.down; b.down = isDown; },
 
@@ -213,7 +234,7 @@ const Input = {
       if (x || y || BTN_NAMES.some(b => d[b].down)) d.lastActive = this.time;
     }
     // gamepads
-    const pads = this.rawPads();
+    const pads = this.slotPads();
     for (let i = 0; i < 4; i++) {
       const d = this.devices['pad' + i], gp = pads[i];
       const was = d.connected;
@@ -223,8 +244,11 @@ const Input = {
         if (was && this.onConnect) this.onConnect(d, false);
         continue;
       }
-      if (d.gpId !== gp.id) {
+      if (d.gpId !== gp.id || !was) {
         d.gpId = gp.id; d.family = padFamily(gp.id);
+        // remember resting stick values: devices that report a stuck axis (fake 'gamepads' like some
+        // RGB keyboards, headsets or virtual drivers) must not drift the menus
+        d.stuck = [Math.abs(gp.axes[0] || 0) > 0.5, Math.abs(gp.axes[1] || 0) > 0.5];
         d.name = PAD_FAMILIES[d.family].name; d.short = 'PAD ' + (i + 1);
       }
       if (!was && this.onConnect) this.onConnect(d, true);
@@ -240,13 +264,14 @@ const Input = {
         pass = C('pass'); shoot = C('shoot'); tackle = C('tackle'); item = C('item'); ability = C('ability'); start = C('start');
       } else if (gp.mapping === 'standard') {
         d.mapping = 'standard';
-        ax = gp.axes[0] || 0; ay = gp.axes[1] || 0;
+        ax = d.stuck[0] ? 0 : gp.axes[0] || 0; ay = d.stuck[1] ? 0 : gp.axes[1] || 0;
         if (B(14)) ax = -1; if (B(15)) ax = 1; if (B(12)) ay = -1; if (B(13)) ay = 1;
         pass = B(0); shoot = B(1) || B(7); tackle = B(2) || B(6); item = B(3) || B(5); ability = B(4); start = B(9);
       } else {
         d.mapping = 'auto';
-        const P = RAW_PROFILES[d.family] || RAW_PROFILES.generic;
-        ax = gp.axes[0] || 0; ay = gp.axes[1] || 0;
+        let P = RAW_PROFILES[d.family] || RAW_PROFILES.generic;
+        if (d.family === 'xbox' && gp.buttons.length >= 15) P = RAW_PROFILES.xboxBT; // Xbox over Bluetooth (macOS / Firefox)
+        ax = d.stuck[0] ? 0 : gp.axes[0] || 0; ay = d.stuck[1] ? 0 : gp.axes[1] || 0;
         // D-pad: hat switch axis (Windows/DirectInput) or a pair of digital axes (Linux)
         const hat = gp.axes.length > 9 ? readHat(gp.axes[9]) : null;
         if (hat) { ax = hat[0]; ay = hat[1]; }

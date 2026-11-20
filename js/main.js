@@ -55,6 +55,18 @@ const App = {
     };
     requestAnimationFrame(frame);
   },
+  // Put a controller on a team automatically, so nobody ends up 'not playing' by accident.
+  autoJoin(id, announce = true) {
+    const pads = Input.order.filter(k => Input.devices[k].kind === 'pad' && Input.devices[k].connected && k !== id);
+    const onL = pads.filter(k => this.sides[k] < 0).length, onR = pads.filter(k => this.sides[k] > 0).length;
+    let side = onL <= onR ? -1 : 1;
+    // the first controller takes over from an idle keyboard on the left team
+    const kbIdle = !Input.devices.kb1.lastActive || Input.devices.kb1.lastActive < Input.time - 8;
+    if (!onL && !onR && kbIdle) { if (this.sides.kb1 < 0) this.sides.kb1 = 0; side = -1; }
+    this.sides[id] = side;
+    if (announce) this.toast(`🎮 P${Input.order.indexOf(id) + 1} joined the ${side < 0 ? 'LEFT' : 'RIGHT'} team`, '#7CFC00');
+    return side;
+  },
   save() { try { localStorage.setItem('monatecup', JSON.stringify({ cfg: this.cfg, opts: this.opts })); } catch (e) { /* ignore */ } },
   toast(msg, color = '#fff') { this.toasts.push({ msg, color, t: 0 }); if (this.toasts.length > 4) this.toasts.shift(); },
 
@@ -103,6 +115,16 @@ const App = {
       if (SFX.sfx) SFX.sfx.gain.value = 0.3;
       if (M && M.demo) { updateMatch(dt); if (M.teams[0].score + M.teams[1].score >= 4 || M.done) this.startDemo(); }
     }
+    // a controller joins a team the first time someone presses one of its buttons
+    // (fake 'gamepads' like virtual drivers never press buttons, so they never join)
+    if (this.screen !== 'match' && this.screen !== 'pads') {
+      this.joinedOnce = this.joinedOnce || {};
+      for (const id of Input.order) {
+        const d = Input.devices[id];
+        if (d.kind !== 'pad' || !d.connected || this.joinedOnce[d.gpId + id]) continue;
+        if (Input.anyPadPressed(id)) { this.joinedOnce[d.gpId + id] = true; if (!this.sides[id]) this.autoJoin(id); }
+      }
+    }
     if (this.handlePointer()) return; // a click was consumed this frame
     switch (this.screen) {
       case 'title': this.uTitle(dt); break;
@@ -139,6 +161,8 @@ const App = {
       if (d.navX) { this.sides[id] = clamp(this.sides[id] + d.navX, -1, 1); SFX.ui(); }
     }
     if (Input.back()) { this.back('title'); return; }
+    const idle = this.joinDevices().find(id => Input.devices[id].kind === 'pad' && this.sides[id] === 0 && Input.devices[id].pass.pressed);
+    if (idle) { this.autoJoin(idle); SFX.uiConfirm(); return; }
     if (Input.confirm()) this.go('capL');
   },
   // ------------------------------------------------------------------ captain select
@@ -195,7 +219,7 @@ const App = {
     }
   },
   // ------------------------------------------------------------------ controllers
-  rawPad(id) { return Input.rawPads()[+id.slice(3)]; },
+  rawPad(id) { return Input.padFor(id); },
   startRemap(id) {
     const gp = this.rawPad(id);
     if (!gp) return;
@@ -231,7 +255,7 @@ const App = {
     this.padsCool = (this.padsCool || 0) - dt;
     if (this.padsCool > 0) return;
     // hold any button on a pad for 2s to remap it (works even if its buttons are unmapped)
-    const pads = Input.rawPads();
+    const pads = Input.slotPads();
     for (let i = 0; i < 4; i++) {
       const gp = pads[i], id = 'pad' + i;
       if (!gp) { this.padHold[id] = 0; continue; }
@@ -259,6 +283,17 @@ const App = {
       if (ny) { this.pauseSel = (this.pauseSel + ny + items.length) % items.length; SFX.ui(); }
       if (Input.confirm()) { SFX.uiConfirm(); items[this.pauseSel][1](); }
       return;
+    }
+    for (const id of Input.order) {
+      const d = Input.devices[id];
+      if (d.kind !== 'pad' || !d.connected || M.demo) continue;
+      if (M.teams.some(t => t.humans.some(h => h.dev === id))) continue;
+      if (Input.anyPadPressed(id)) {
+        const side = this.autoJoin(id);
+        const T = M.teams[side < 0 ? 0 : 1];
+        T.humans.push({ dev: id, player: null, cd: 0, color: HUMAN_COLORS[Input.order.indexOf(id)], label: 'P' + (Input.order.indexOf(id) + 1) });
+        if (T.ai === DIFF[T.diffKey] && T.diffKey !== 'normal') { T.ai = DIFF.normal; }
+      }
     }
     updateMatch(dt);
     if (M.done) { this.screen = 'results'; this.resSel = 0; this.resultsT = 0; this.resultMatch = M; SFX.cheer(1); SFX.vuvuzela(3); }
@@ -347,7 +382,7 @@ const App = {
     this.toasts.forEach((t, i) => {
       const a = Math.min(1, t.t * 5, (3.2 - t.t) * 3);
       c.globalAlpha = a;
-      const w = Math.min(this.W - 30, 400 * u), x = this.W - w - 14 * u, y = (this.screen === 'match' ? 130 : 66) * u + i * 42 * u;
+      const w = Math.min(this.W - 30, 400 * u), x = this.W - w - 14 * u, y = (this.screen === 'match' ? 130 * u + i * 42 * u : this.H - 120 * u - i * 42 * u);
       this.panel(c, x, y, w, 36 * u, 'rgba(8,10,28,0.92)', t.color);
       text(c, t.msg, x + w / 2, y + 18 * u, Math.min(17 * u, w / (t.msg.length * 0.55)), t.color, 'center', '#000', 3);
       c.globalAlpha = 1;
@@ -447,7 +482,7 @@ const App = {
   rPads(c) {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'CONTROLLERS', 'Plug in a controller and press any button. Xbox, PlayStation, Switch, 8BitDo, Logitech, Steam, phone & retro USB pads all work.');
-    const pads = Input.rawPads();
+    const pads = Input.slotPads();
     const cols = W < 900 ? 1 : 2, cw = Math.min((W - 60 * u) / cols - 10 * u, 560 * u), ch = Math.min(170 * u, (H - 280 * u) / (4 / cols));
     for (let i = 0; i < 4; i++) {
       const id = 'pad' + i, d = Input.devices[id], gp = pads[i];
@@ -475,6 +510,13 @@ const App = {
       });
       text(c, fam.g.start, (sx + fx) / 2, fy - off * 1.25, 10 * u, d.start.down ? '#ffe066' : '#888', 'center', null, 0, FONT);
       text(c, fam.g.ability + ' POWER', (sx + fx) / 2, fy + off * 1.3, 10 * u, d.ability.down ? '#ff922b' : '#888', 'center', null, 0, FONT);
+      // raw readout: exactly what the browser reports (useful when a pad isn't recognised)
+      const pressedIdx = gp.buttons.map((b, k) => (b.pressed || b.value > 0.5) ? k : -1).filter(k => k >= 0);
+      const movedAx = gp.axes.map((v, k) => Math.abs(v) > 0.4 ? `a${k}:${v.toFixed(1)}` : '').filter(Boolean);
+      const raw = `RAW · ${gp.buttons.length} buttons, ${gp.axes.length} axes · pressed: ${pressedIdx.join(' ') || '-'} · ${movedAx.join(' ') || 'sticks centred'}`;
+      text(c, raw, x + 16 * u, y + 86 * u, Math.min(11 * u, (cw * 0.6) / (raw.length * 0.48)), pressedIdx.length || movedAx.length ? '#ffe066' : '#777', 'left', null, 0, FONT_UI);
+      const team = this.sides[id] < 0 ? 'LEFT TEAM' : this.sides[id] > 0 ? 'RIGHT TEAM' : 'NOT PLAYING';
+      text(c, team, x + cw - 16 * u, y + 24 * u, 12 * u, this.sides[id] ? '#7CFC00' : '#ff8787', 'right', null, 0, FONT);
       // actions
       const by = y + ch - 44 * u;
       this.button(c, x + 14 * u, by, 120 * u, 32 * u, '🛠 REMAP', () => this.startRemap(id), { size: 14 * u });
@@ -483,6 +525,20 @@ const App = {
       const hold = this.padHold[id] || 0;
       if (hold > 0.2) { c.fillStyle = '#ffe066'; c.fillRect(x, y + ch - 5 * u, cw * Math.min(1, hold / 2), 5 * u); }
     }
+    if (!pads.some(Boolean)) {
+      const issues = [];
+      if (!navigator.getGamepads) issues.push('❌ This browser has no gamepad support. Use Chrome, Edge, Firefox or Safari (latest).');
+      if (!window.isSecureContext) issues.push('❌ Controllers need https:// or a local file. Open the game from its https:// address.');
+      if (window.top !== window.self) issues.push('⚠️ The game is inside an embedded frame, which can block controllers. Open it in its own tab.');
+      issues.push('👉 PRESS A BUTTON on the controller: browsers hide controllers until a button is pressed.');
+      issues.push('👉 Xbox / PC pads: plug in by USB or pair via Bluetooth BEFORE pressing a button. If on Windows, close Steam\'s overlay.');
+      issues.push('👉 PlayStation pads work best in Chrome or Edge.');
+      const bw = Math.min(W - 40, 860 * u), bh = 40 * u + issues.length * 24 * u, bx = W / 2 - bw / 2, by0 = Math.max(120 * u, H / 2 - bh / 2);
+      this.panel(c, bx, by0, bw, bh, 'rgba(8,10,28,0.96)', '#ffd43b');
+      text(c, 'NO CONTROLLER DETECTED YET', W / 2, by0 + 22 * u, 18 * u, '#ffd43b', 'center', '#000', 3);
+      issues.forEach((t, k) => text(c, t, bx + 18 * u, by0 + 50 * u + k * 24 * u, Math.min(14 * u, (bw - 36 * u) / (t.length * 0.5)), t.startsWith('👉') ? '#fff' : '#ff8787', 'left', null, 0, FONT_UI));
+    }
+    if (Input.extraPads) text(c, `${Input.extraPads} more controller(s) detected — only 4 can play at once.`, W / 2, H - 122 * u, 12 * u, '#ffd43b', 'center', null, 0, FONT_UI);
     text(c, 'Wrong buttons? Click REMAP, press 1-4 on the keyboard, or HOLD ANY BUTTON on the controller for 2 seconds.', W / 2, H - 100 * u, Math.min(14 * u, (W - 40) / 100 * 1.9), '#fff', 'center', '#000', 3);
     text(c, 'Back: Esc / click BACK / press START on a controller', W / 2, H - 78 * u, 12 * u, '#aaa', 'center', null, 0, FONT_UI);
     this.navButtons(c, () => this.back(this.padsReturn), null);
