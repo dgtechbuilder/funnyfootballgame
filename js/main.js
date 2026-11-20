@@ -9,9 +9,10 @@ const REMAP_STEPS = [
   ['pass', 'PRESS: PASS / SWITCH', 'usually the BOTTOM face button'], ['shoot', 'PRESS: SHOOT', 'usually the RIGHT face button'],
   ['tackle', 'PRESS: TACKLE', 'usually the LEFT face button'], ['item', 'PRESS: USE ITEM', 'usually the TOP face button'],
   ['ability', 'PRESS: SPECIAL POWER', 'usually the LEFT shoulder (LB / L1 / L)'],
+  ['dodge', 'PRESS: DODGE', 'usually the RIGHT shoulder (RB / R1 / R)'],
   ['start', 'PRESS: PAUSE', 'Start / Menu / Options / +'],
 ];
-const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true };
+const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true, gearL: 'none', gearR: 'none' };
 
 const App = {
   cv: null, c: null, W: 1280, H: 720, dpr: 1, t: 0,
@@ -38,6 +39,7 @@ const App = {
     if (!CAPTAINS.some(c => c.id === this.cfg.capL)) this.cfg.capL = DEFAULT_CFG.capL;
     if (!CAPTAINS.some(c => c.id === this.cfg.capR)) this.cfg.capR = DEFAULT_CFG.capR;
     if (!STADIUMS.some(s => s.id === this.cfg.stadium)) this.cfg.stadium = DEFAULT_CFG.stadium;
+    for (const k of ['gearL', 'gearR']) if (!GEAR[this.cfg[k]]) this.cfg[k] = 'none';
     Input.rumbleOn = this.opts.rumble !== false;
     Input.onConnect = (d, on) => {
       this.toast(`${on ? PAD_FAMILIES[d.family].icon : '❌'} ${d.name} ${on ? 'connected' : 'disconnected'} (P${Input.order.indexOf(d.id) + 1})`, on ? '#7CFC00' : '#ff8787');
@@ -197,6 +199,10 @@ const App = {
       { label: 'Golden Goal On Draw', vals: [true, false], key: 'golden', fmt: v => v ? 'ON' : 'OFF' },
       { label: 'Commentator Voice', vals: [false, true], key: 'voice', opt: true, fmt: v => v ? 'ON (TTS)' : 'OFF' },
       { label: 'Controller Rumble', vals: [true, false], key: 'rumble', opt: true, fmt: v => v ? 'ON' : 'OFF' },
+      ...(MECH.gear.enabled ? [
+        { label: 'Left Team Gear', vals: GEAR_KEYS, key: 'gearL', fmt: v => GEAR[v].name.toUpperCase(), hint: v => gearLabel(v) },
+        { label: 'Right Team Gear', vals: GEAR_KEYS, key: 'gearR', fmt: v => GEAR[v].name.toUpperCase(), hint: v => gearLabel(v) },
+      ] : []),
       { label: 'KICK OFF!', start: true },
     ];
   },
@@ -443,14 +449,14 @@ const App = {
 
   controlsCard(c, x, y, w) {
     const u = this.u();
-    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER'],
+    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER', 'DODGE'],
       ['Keyboard 1', ...Object.values(KB_LAYOUTS.kb1.help)], ['Keyboard 2', ...Object.values(KB_LAYOUTS.kb2.help)],
-      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y / RB', 'LB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△ / R1', 'L1'],
-      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X / R', 'L']];
+      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y', 'LB', 'RB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△', 'L1', 'R1'],
+      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X', 'L', 'R']];
     const h = 22 * u + rows.length * 25 * u;
     this.panel(c, x, y, w, h);
     rows.forEach((r, ri) => r.forEach((s, ci) => {
-      const cx = x + w * (0.075 + ci * 0.142);
+      const cx = x + w * (0.066 + ci * 0.124);
       text(c, s, cx, y + 20 * u + ri * 25 * u, 13.5 * u, ri === 0 ? '#ffe066' : (ci === 0 ? '#9cf' : '#fff'), 'center', null, 0, ri === 0 ? FONT : FONT_UI);
     }));
     return h;
@@ -467,6 +473,8 @@ const App = {
       '🦵  TACKLE the ball carrier to steal it. Flatten someone WITHOUT the ball = CHEAP SHOT, and their team gets a power-up.',
       '🌀  JUKE: press TACKLE while you have the ball to spin past defenders.',
       '🔥  POWERS: every captain has a silly signature power, every teammate a squad power. Press POWER (Q / LB / L1) when the meter is full.',
+      '💨  DODGE (E / RB / R1) just as a tackle arrives for a speed boost. Hold SHOOT or TACKLE and release in the green zone for a perfect one.',
+      '🔮  Grab the HYPER ORB, clear the box of defenders, then hold POWER and hit the prompts for a 2-point HYPER STRIKE.',
       '🧤  Keepers get distracted by phone calls and suya when the ball is far away... and sometimes grow STRETCHY ARMS.',
       '⚡  ONE-TIMER: press SHOOT while a pass is coming to you for a PERFECT volley.',
       '🎁  POWER-UPS: run over ? boxes. 🍌 Plantain Peel  🐔 Market Chicken  🥥 Coconut Bomb  🌶️ Scotch Bonnet',
@@ -688,7 +696,7 @@ const App = {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'MATCH RULES', 'There are no rules. Except these ones.');
     const rows = this.optionRows();
-    const rw = Math.min(W - 40, 640 * u), rh = 42 * u, x = W / 2 - rw / 2, y0 = 112 * u;
+    const rw = Math.min(W - 40, 700 * u), rh = (rows.length > 8 ? 36 : 42) * u, x = W / 2 - rw / 2, y0 = 108 * u;
     rows.forEach((r, i) => {
       const y = y0 + i * (rh + 8 * u), sel = i === this.optSel;
       if (r.start) {
@@ -707,9 +715,10 @@ const App = {
       this.panel(c, x, y, rw, rh, sel || hov ? 'rgba(255,224,102,0.22)' : 'rgba(10,12,34,0.85)', sel || hov ? '#ffe066' : 'rgba(255,255,255,0.4)');
       text(c, r.label.toUpperCase(), x + 18 * u, y + rh / 2, 17 * u, '#fff', 'left', '#000', 3 * u);
       const obj = r.opt ? this.opts : this.cfg;
+      if (r.hint) text(c, r.hint(obj[r.key]), x + 205 * u, y + rh / 2, 12 * u, '#ffd43b', 'left', null, 0, FONT_UI);
       this.hit(x, y, rw - 220 * u, rh, () => { this.optSel = i; this.changeOpt(r, 1); }, () => { this.optSel = i; });
       this.button(c, x + rw - 210 * u, y + 5 * u, 32 * u, rh - 10 * u, '◀', () => { this.optSel = i; this.changeOpt(r, -1); }, { size: 14 * u, hover: () => { this.optSel = i; } });
-      text(c, r.fmt(obj[r.key]), x + rw - 112 * u, y + rh / 2, 16 * u, sel ? '#ffe066' : '#9cf', 'center', '#000', 3 * u);
+      { const v = r.fmt(obj[r.key]); text(c, v, x + rw - 112 * u, y + rh / 2, Math.min(16 * u, 130 * u / (v.length * 0.5)), sel ? '#ffe066' : '#9cf', 'center', '#000', 3 * u); }
       this.button(c, x + rw - 46 * u, y + 5 * u, 32 * u, rh - 10 * u, '▶', () => { this.optSel = i; this.changeOpt(r, 1); }, { size: 14 * u, hover: () => { this.optSel = i; } });
     });
     const capL = CAPTAINS.find(x => x.id === this.cfg.capL), capR = CAPTAINS.find(x => x.id === this.cfg.capR), st = STADIUMS.find(s => s.id === this.cfg.stadium);

@@ -22,14 +22,14 @@ Every menu is fully clickable: buttons, captains, stadiums and option arrows. Cl
 
 ### Keyboard and controllers
 
-|              | Move           | Pass / Switch | Shoot (hold to charge) | Tackle / Juke | Item        | Power      |
-|--------------|----------------|---------------|------------------------|---------------|-------------|------------|
-| Keyboard 1   | `W A S D`      | `F` or `J`    | `G`, `K` or `Space`    | `H` or `L`    | `R` or `I`  | `Q` or `U` |
-| Keyboard 2   | Arrows         | `,` / Num1    | `.` / Num2             | `/` / Num3    | `'` / Num0  | `;` / Num4 |
-| Xbox         | Stick / D-pad  | A             | B / RT                 | X / LT        | Y / RB      | LB         |
-| PlayStation  | Stick / D-pad  | ✕             | ○ / R2                 | □ / L2        | △ / R1      | L1         |
-| Switch / 8BitDo | Stick / D-pad | B           | A / ZR                 | Y / ZL        | X / R       | L          |
-| Touch        | Drag left side | PASS          | SHOOT                  | TACKLE        | ITEM        | POWER      |
+|              | Move           | Pass / Switch | Shoot (hold to charge) | Tackle (hold to charge) / Juke | Item | Power | Dodge |
+|--------------|----------------|---------------|------------------------|---------------|------|-------|-------|
+| Keyboard 1   | `W A S D`      | `F` or `J`    | `G`, `K` or `Space`    | `H` or `L`    | `R` or `I` | `Q` or `U` | `E` or `O` |
+| Keyboard 2   | Arrows         | `,` / Num1    | `.` / Num2             | `/` / Num3    | `'` / Num0 | `;` / Num4 | `]` / Num5 |
+| Xbox         | Stick / D-pad  | A             | B / RT                 | X / LT        | Y    | LB    | RB    |
+| PlayStation  | Stick / D-pad  | ✕             | ○ / R2                 | □ / L2        | △    | L1    | R1    |
+| Switch / 8BitDo | Stick / D-pad | B           | A / ZR                 | Y / ZL        | X    | L     | R     |
+| Touch        | Drag left side | PASS          | SHOOT                  | TACKLE        | ITEM | POWER | DODGE |
 
 `Esc` / `P` / Start pauses the game, `N` mutes and `M` toggles the music.
 
@@ -106,6 +106,30 @@ That makes them slow to react when the ball comes back. Sometimes they also grow
 
 CPU teams use their powers too.
 
+## Add-on mechanics (each can be switched off)
+
+All tunable numbers and an on/off flag for each mechanic live in **`js/config.js`**. You can also test one mechanic on its own from the URL:
+
+- `index.html?mech=dodge` turns on only the dodge.
+- `index.html?mech=-hyper,-gear` turns on everything except hyper strike and gear.
+
+The mechanics:
+
+1. **Timed dodge.** Press DODGE to sidestep (2 s cooldown).
+   - Dodge just as an enemy tackle arrives to get **PERFECT DODGE**: +30% speed for 1.5 s.
+   - A mistimed dodge still sidesteps but gives no boost.
+2. **Charged tackles and shots.** Hold TACKLE or SHOOT, then release while the needle is in the green zone of the meter.
+   - A perfect tackle slides further and hits harder.
+   - A perfect shot is faster and goalie-breaking: the keeper is much less likely to save it and gets knocked over if they do.
+3. **Tackle immobilize.** A tackled player stays down for 2.5 s.
+4. **Off-ball foul.** Tackling someone more than 5 m from the ball (who isn't the pass receiver) gives the victim's team a free item. If their item pockets are already full, it's used straight away. A red **OFF-BALL FOUL!** banner explains what happened.
+5. **Hyper strike.** A 🔮 orb drops onto the pitch every 35 s.
+   - The holder needs the ball and an empty defender zone in front of the goal (shown as a green or red outline).
+   - Then hold POWER to charge and hit the button prompts.
+   - Success plays a cutscene and an arcing power kick worth **2 goals**. Failure loses the orb and gives the ball to the other team.
+   - New strikes go in `HYPER_STRIKES` in `js/game.js`.
+6. **Gear.** Set each team's gear in Match Rules. Gear raises some stats and lowers others for all outfield players, for example Heavy Boots: −12% speed, +20% power, +10% tackle.
+
 ## Stadiums
 
 | Stadium | Walls | Hazard |
@@ -138,6 +162,7 @@ CPU teams use their powers too.
 
 | File | What it holds |
 |---|---|
+| `js/config.js` | Tunable numbers and on/off flags for the add-on mechanics, plus gear |
 | `js/data.js` | Captains, stadiums, items, names and commentary |
 | `js/audio.js` | WebAudio sound effects, vuvuzelas and the Afrobeats sequencer |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: family detection, raw profiles, hat D-pads, custom remaps, rumble |
