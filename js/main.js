@@ -9,9 +9,10 @@ const REMAP_STEPS = [
   ['pass', 'PRESS: PASS / SWITCH', 'usually the BOTTOM face button'], ['shoot', 'PRESS: SHOOT', 'usually the RIGHT face button'],
   ['tackle', 'PRESS: TACKLE', 'usually the LEFT face button'], ['item', 'PRESS: USE ITEM', 'usually the TOP face button'],
   ['ability', 'PRESS: SPECIAL POWER', 'usually the LEFT shoulder (LB / L1 / L)'],
+  ['dodge', 'PRESS: DODGE', 'usually the RIGHT shoulder (RB / R1 / R)'],
   ['start', 'PRESS: PAUSE', 'Start / Menu / Options / +'],
 ];
-const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true };
+const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true, gearL: 'none', gearR: 'none' };
 
 const App = {
   cv: null, c: null, W: 1280, H: 720, dpr: 1, t: 0,
@@ -38,6 +39,7 @@ const App = {
     if (!CAPTAINS.some(c => c.id === this.cfg.capL)) this.cfg.capL = DEFAULT_CFG.capL;
     if (!CAPTAINS.some(c => c.id === this.cfg.capR)) this.cfg.capR = DEFAULT_CFG.capR;
     if (!STADIUMS.some(s => s.id === this.cfg.stadium)) this.cfg.stadium = DEFAULT_CFG.stadium;
+    for (const k of ['gearL', 'gearR']) if (!GEAR[this.cfg[k]]) this.cfg[k] = 'none';
     Input.rumbleOn = this.opts.rumble !== false;
     Input.onConnect = (d, on) => {
       this.toast(`${on ? PAD_FAMILIES[d.family].icon : '❌'} ${d.name} ${on ? 'connected' : 'disconnected'} (P${Input.order.indexOf(d.id) + 1})`, on ? '#7CFC00' : '#ff8787');
@@ -54,6 +56,18 @@ const App = {
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
+  },
+  // Put a controller on a team automatically, so nobody ends up 'not playing' by accident.
+  autoJoin(id, announce = true) {
+    const pads = Input.order.filter(k => Input.devices[k].kind === 'pad' && Input.devices[k].connected && k !== id);
+    const onL = pads.filter(k => this.sides[k] < 0).length, onR = pads.filter(k => this.sides[k] > 0).length;
+    let side = onL <= onR ? -1 : 1;
+    // the first controller takes over from an idle keyboard on the left team
+    const kbIdle = !Input.devices.kb1.lastActive || Input.devices.kb1.lastActive < Input.time - 8;
+    if (!onL && !onR && kbIdle) { if (this.sides.kb1 < 0) this.sides.kb1 = 0; side = -1; }
+    this.sides[id] = side;
+    if (announce) this.toast(`🎮 P${Input.order.indexOf(id) + 1} joined the ${side < 0 ? 'LEFT' : 'RIGHT'} team`, '#7CFC00');
+    return side;
   },
   save() { try { localStorage.setItem('monatecup', JSON.stringify({ cfg: this.cfg, opts: this.opts })); } catch (e) { /* ignore */ } },
   toast(msg, color = '#fff') { this.toasts.push({ msg, color, t: 0 }); if (this.toasts.length > 4) this.toasts.shift(); },
@@ -103,6 +117,16 @@ const App = {
       if (SFX.sfx) SFX.sfx.gain.value = 0.3;
       if (M && M.demo) { updateMatch(dt); if (M.teams[0].score + M.teams[1].score >= 4 || M.done) this.startDemo(); }
     }
+    // a controller joins a team the first time someone presses one of its buttons
+    // (fake 'gamepads' like virtual drivers never press buttons, so they never join)
+    if (this.screen !== 'match' && this.screen !== 'pads') {
+      this.joinedOnce = this.joinedOnce || {};
+      for (const id of Input.order) {
+        const d = Input.devices[id];
+        if (d.kind !== 'pad' || !d.connected || this.joinedOnce[d.gpId + id]) continue;
+        if (Input.anyPadPressed(id)) { this.joinedOnce[d.gpId + id] = true; if (!this.sides[id]) this.autoJoin(id); }
+      }
+    }
     if (this.handlePointer()) return; // a click was consumed this frame
     switch (this.screen) {
       case 'title': this.uTitle(dt); break;
@@ -139,6 +163,8 @@ const App = {
       if (d.navX) { this.sides[id] = clamp(this.sides[id] + d.navX, -1, 1); SFX.ui(); }
     }
     if (Input.back()) { this.back('title'); return; }
+    const idle = this.joinDevices().find(id => Input.devices[id].kind === 'pad' && this.sides[id] === 0 && Input.devices[id].pass.pressed);
+    if (idle) { this.autoJoin(idle); SFX.uiConfirm(); return; }
     if (Input.confirm()) this.go('capL');
   },
   // ------------------------------------------------------------------ captain select
@@ -173,6 +199,10 @@ const App = {
       { label: 'Golden Goal On Draw', vals: [true, false], key: 'golden', fmt: v => v ? 'ON' : 'OFF' },
       { label: 'Commentator Voice', vals: [false, true], key: 'voice', opt: true, fmt: v => v ? 'ON (TTS)' : 'OFF' },
       { label: 'Controller Rumble', vals: [true, false], key: 'rumble', opt: true, fmt: v => v ? 'ON' : 'OFF' },
+      ...(MECH.gear.enabled ? [
+        { label: 'Left Team Gear', vals: GEAR_KEYS, key: 'gearL', fmt: v => GEAR[v].name.toUpperCase(), hint: v => gearLabel(v) },
+        { label: 'Right Team Gear', vals: GEAR_KEYS, key: 'gearR', fmt: v => GEAR[v].name.toUpperCase(), hint: v => gearLabel(v) },
+      ] : []),
       { label: 'KICK OFF!', start: true },
     ];
   },
@@ -195,7 +225,7 @@ const App = {
     }
   },
   // ------------------------------------------------------------------ controllers
-  rawPad(id) { return Input.rawPads()[+id.slice(3)]; },
+  rawPad(id) { return Input.padFor(id); },
   startRemap(id) {
     const gp = this.rawPad(id);
     if (!gp) return;
@@ -231,7 +261,7 @@ const App = {
     this.padsCool = (this.padsCool || 0) - dt;
     if (this.padsCool > 0) return;
     // hold any button on a pad for 2s to remap it (works even if its buttons are unmapped)
-    const pads = Input.rawPads();
+    const pads = Input.slotPads();
     for (let i = 0; i < 4; i++) {
       const gp = pads[i], id = 'pad' + i;
       if (!gp) { this.padHold[id] = 0; continue; }
@@ -259,6 +289,17 @@ const App = {
       if (ny) { this.pauseSel = (this.pauseSel + ny + items.length) % items.length; SFX.ui(); }
       if (Input.confirm()) { SFX.uiConfirm(); items[this.pauseSel][1](); }
       return;
+    }
+    for (const id of Input.order) {
+      const d = Input.devices[id];
+      if (d.kind !== 'pad' || !d.connected || M.demo) continue;
+      if (M.teams.some(t => t.humans.some(h => h.dev === id))) continue;
+      if (Input.anyPadPressed(id)) {
+        const side = this.autoJoin(id);
+        const T = M.teams[side < 0 ? 0 : 1];
+        T.humans.push({ dev: id, player: null, cd: 0, color: HUMAN_COLORS[Input.order.indexOf(id)], label: 'P' + (Input.order.indexOf(id) + 1) });
+        if (T.ai === DIFF[T.diffKey] && T.diffKey !== 'normal') { T.ai = DIFF.normal; }
+      }
     }
     updateMatch(dt);
     if (M.done) { this.screen = 'results'; this.resSel = 0; this.resultsT = 0; this.resultMatch = M; SFX.cheer(1); SFX.vuvuzela(3); }
@@ -347,7 +388,7 @@ const App = {
     this.toasts.forEach((t, i) => {
       const a = Math.min(1, t.t * 5, (3.2 - t.t) * 3);
       c.globalAlpha = a;
-      const w = Math.min(this.W - 30, 400 * u), x = this.W - w - 14 * u, y = (this.screen === 'match' ? 130 : 66) * u + i * 42 * u;
+      const w = Math.min(this.W - 30, 400 * u), x = this.W - w - 14 * u, y = (this.screen === 'match' ? 130 * u + i * 42 * u : this.H - 120 * u - i * 42 * u);
       this.panel(c, x, y, w, 36 * u, 'rgba(8,10,28,0.92)', t.color);
       text(c, t.msg, x + w / 2, y + 18 * u, Math.min(17 * u, w / (t.msg.length * 0.55)), t.color, 'center', '#000', 3);
       c.globalAlpha = 1;
@@ -408,14 +449,14 @@ const App = {
 
   controlsCard(c, x, y, w) {
     const u = this.u();
-    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER'],
+    const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER', 'DODGE'],
       ['Keyboard 1', ...Object.values(KB_LAYOUTS.kb1.help)], ['Keyboard 2', ...Object.values(KB_LAYOUTS.kb2.help)],
-      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y / RB', 'LB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△ / R1', 'L1'],
-      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X / R', 'L']];
+      ['Xbox', 'Stick / D-pad', 'A', 'B / RT', 'X / LT', 'Y', 'LB', 'RB'], ['PlayStation', 'Stick / D-pad', '✕', '○ / R2', '□ / L2', '△', 'L1', 'R1'],
+      ['Switch / 8BitDo', 'Stick / D-pad', 'B', 'A / ZR', 'Y / ZL', 'X', 'L', 'R']];
     const h = 22 * u + rows.length * 25 * u;
     this.panel(c, x, y, w, h);
     rows.forEach((r, ri) => r.forEach((s, ci) => {
-      const cx = x + w * (0.075 + ci * 0.142);
+      const cx = x + w * (0.066 + ci * 0.124);
       text(c, s, cx, y + 20 * u + ri * 25 * u, 13.5 * u, ri === 0 ? '#ffe066' : (ci === 0 ? '#9cf' : '#fff'), 'center', null, 0, ri === 0 ? FONT : FONT_UI);
     }));
     return h;
@@ -432,6 +473,8 @@ const App = {
       '🦵  TACKLE the ball carrier to steal it. Flatten someone WITHOUT the ball = CHEAP SHOT, and their team gets a power-up.',
       '🌀  JUKE: press TACKLE while you have the ball to spin past defenders.',
       '🔥  POWERS: every captain has a silly signature power, every teammate a squad power. Press POWER (Q / LB / L1) when the meter is full.',
+      '💨  DODGE (E / RB / R1) just as a tackle arrives for a speed boost. Hold SHOOT or TACKLE and release in the green zone for a perfect one.',
+      '🔮  Grab the HYPER ORB, clear the box of defenders, then hold POWER and hit the prompts for a 2-point HYPER STRIKE.',
       '🧤  Keepers get distracted by phone calls and suya when the ball is far away... and sometimes grow STRETCHY ARMS.',
       '⚡  ONE-TIMER: press SHOOT while a pass is coming to you for a PERFECT volley.',
       '🎁  POWER-UPS: run over ? boxes. 🍌 Plantain Peel  🐔 Market Chicken  🥥 Coconut Bomb  🌶️ Scotch Bonnet',
@@ -447,7 +490,7 @@ const App = {
   rPads(c) {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'CONTROLLERS', 'Plug in a controller and press any button. Xbox, PlayStation, Switch, 8BitDo, Logitech, Steam, phone & retro USB pads all work.');
-    const pads = Input.rawPads();
+    const pads = Input.slotPads();
     const cols = W < 900 ? 1 : 2, cw = Math.min((W - 60 * u) / cols - 10 * u, 560 * u), ch = Math.min(170 * u, (H - 280 * u) / (4 / cols));
     for (let i = 0; i < 4; i++) {
       const id = 'pad' + i, d = Input.devices[id], gp = pads[i];
@@ -475,6 +518,13 @@ const App = {
       });
       text(c, fam.g.start, (sx + fx) / 2, fy - off * 1.25, 10 * u, d.start.down ? '#ffe066' : '#888', 'center', null, 0, FONT);
       text(c, fam.g.ability + ' POWER', (sx + fx) / 2, fy + off * 1.3, 10 * u, d.ability.down ? '#ff922b' : '#888', 'center', null, 0, FONT);
+      // raw readout: exactly what the browser reports (useful when a pad isn't recognised)
+      const pressedIdx = gp.buttons.map((b, k) => (b.pressed || b.value > 0.5) ? k : -1).filter(k => k >= 0);
+      const movedAx = gp.axes.map((v, k) => Math.abs(v) > 0.4 ? `a${k}:${v.toFixed(1)}` : '').filter(Boolean);
+      const raw = `RAW · ${gp.buttons.length} buttons, ${gp.axes.length} axes · pressed: ${pressedIdx.join(' ') || '-'} · ${movedAx.join(' ') || 'sticks centred'}`;
+      text(c, raw, x + 16 * u, y + 86 * u, Math.min(11 * u, (cw * 0.6) / (raw.length * 0.48)), pressedIdx.length || movedAx.length ? '#ffe066' : '#777', 'left', null, 0, FONT_UI);
+      const team = this.sides[id] < 0 ? 'LEFT TEAM' : this.sides[id] > 0 ? 'RIGHT TEAM' : 'NOT PLAYING';
+      text(c, team, x + cw - 16 * u, y + 24 * u, 12 * u, this.sides[id] ? '#7CFC00' : '#ff8787', 'right', null, 0, FONT);
       // actions
       const by = y + ch - 44 * u;
       this.button(c, x + 14 * u, by, 120 * u, 32 * u, '🛠 REMAP', () => this.startRemap(id), { size: 14 * u });
@@ -483,6 +533,20 @@ const App = {
       const hold = this.padHold[id] || 0;
       if (hold > 0.2) { c.fillStyle = '#ffe066'; c.fillRect(x, y + ch - 5 * u, cw * Math.min(1, hold / 2), 5 * u); }
     }
+    if (!pads.some(Boolean)) {
+      const issues = [];
+      if (!navigator.getGamepads) issues.push('❌ This browser has no gamepad support. Use Chrome, Edge, Firefox or Safari (latest).');
+      if (!window.isSecureContext) issues.push('❌ Controllers need https:// or a local file. Open the game from its https:// address.');
+      if (window.top !== window.self) issues.push('⚠️ The game is inside an embedded frame, which can block controllers. Open it in its own tab.');
+      issues.push('👉 PRESS A BUTTON on the controller: browsers hide controllers until a button is pressed.');
+      issues.push('👉 Xbox / PC pads: plug in by USB or pair via Bluetooth BEFORE pressing a button. If on Windows, close Steam\'s overlay.');
+      issues.push('👉 PlayStation pads work best in Chrome or Edge.');
+      const bw = Math.min(W - 40, 860 * u), bh = 40 * u + issues.length * 24 * u, bx = W / 2 - bw / 2, by0 = Math.max(120 * u, H / 2 - bh / 2);
+      this.panel(c, bx, by0, bw, bh, 'rgba(8,10,28,0.96)', '#ffd43b');
+      text(c, 'NO CONTROLLER DETECTED YET', W / 2, by0 + 22 * u, 18 * u, '#ffd43b', 'center', '#000', 3);
+      issues.forEach((t, k) => text(c, t, bx + 18 * u, by0 + 50 * u + k * 24 * u, Math.min(14 * u, (bw - 36 * u) / (t.length * 0.5)), t.startsWith('👉') ? '#fff' : '#ff8787', 'left', null, 0, FONT_UI));
+    }
+    if (Input.extraPads) text(c, `${Input.extraPads} more controller(s) detected — only 4 can play at once.`, W / 2, H - 122 * u, 12 * u, '#ffd43b', 'center', null, 0, FONT_UI);
     text(c, 'Wrong buttons? Click REMAP, press 1-4 on the keyboard, or HOLD ANY BUTTON on the controller for 2 seconds.', W / 2, H - 100 * u, Math.min(14 * u, (W - 40) / 100 * 1.9), '#fff', 'center', '#000', 3);
     text(c, 'Back: Esc / click BACK / press START on a controller', W / 2, H - 78 * u, 12 * u, '#aaa', 'center', null, 0, FONT_UI);
     this.navButtons(c, () => this.back(this.padsReturn), null);
@@ -632,7 +696,7 @@ const App = {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'MATCH RULES', 'There are no rules. Except these ones.');
     const rows = this.optionRows();
-    const rw = Math.min(W - 40, 640 * u), rh = 42 * u, x = W / 2 - rw / 2, y0 = 112 * u;
+    const rw = Math.min(W - 40, 700 * u), rh = (rows.length > 8 ? 36 : 42) * u, x = W / 2 - rw / 2, y0 = 108 * u;
     rows.forEach((r, i) => {
       const y = y0 + i * (rh + 8 * u), sel = i === this.optSel;
       if (r.start) {
@@ -651,9 +715,10 @@ const App = {
       this.panel(c, x, y, rw, rh, sel || hov ? 'rgba(255,224,102,0.22)' : 'rgba(10,12,34,0.85)', sel || hov ? '#ffe066' : 'rgba(255,255,255,0.4)');
       text(c, r.label.toUpperCase(), x + 18 * u, y + rh / 2, 17 * u, '#fff', 'left', '#000', 3 * u);
       const obj = r.opt ? this.opts : this.cfg;
+      if (r.hint) text(c, r.hint(obj[r.key]), x + 205 * u, y + rh / 2, 12 * u, '#ffd43b', 'left', null, 0, FONT_UI);
       this.hit(x, y, rw - 220 * u, rh, () => { this.optSel = i; this.changeOpt(r, 1); }, () => { this.optSel = i; });
       this.button(c, x + rw - 210 * u, y + 5 * u, 32 * u, rh - 10 * u, '◀', () => { this.optSel = i; this.changeOpt(r, -1); }, { size: 14 * u, hover: () => { this.optSel = i; } });
-      text(c, r.fmt(obj[r.key]), x + rw - 112 * u, y + rh / 2, 16 * u, sel ? '#ffe066' : '#9cf', 'center', '#000', 3 * u);
+      { const v = r.fmt(obj[r.key]); text(c, v, x + rw - 112 * u, y + rh / 2, Math.min(16 * u, 130 * u / (v.length * 0.5)), sel ? '#ffe066' : '#9cf', 'center', '#000', 3 * u); }
       this.button(c, x + rw - 46 * u, y + 5 * u, 32 * u, rh - 10 * u, '▶', () => { this.optSel = i; this.changeOpt(r, 1); }, { size: 14 * u, hover: () => { this.optSel = i; } });
     });
     const capL = CAPTAINS.find(x => x.id === this.cfg.capL), capR = CAPTAINS.find(x => x.id === this.cfg.capR), st = STADIUMS.find(s => s.id === this.cfg.stadium);

@@ -15,8 +15,8 @@ const DIFF = {
   hard:   { react: 0.09, acc: 0.95, tackle: 1.5, keeper: 1.12, superAcc: 0.85, speed: 1.06, item: 1.4 },
 };
 const SAVE_P = { boulder: 0.22, zigzag: 0.25, split: 0.2, sky: 0.18, teleport: 0.14, curve: 0.25, dance: 0.05, cannon: 0.26 };
-const SUPER_STYLE = { boulder: 'bus', zigzag: 'electric', split: 'jollof', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
-const SUPER_SIZE = { boulder: 2.6, split: 1.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
+const SUPER_STYLE = { hyperArc: 'fire', boulder: 'bus', zigzag: 'electric', split: 'jollof', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
+const SUPER_SIZE = { hyperArc: 1.7, boulder: 2.6, split: 1.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
 
 let M = null; // current match
 
@@ -35,7 +35,8 @@ function makePlayer(team, slot, role) {
     state: 'normal', stateT: 0, anim: rand(0, 10), moving: 0, lyingDir: 1,
     charging: false, charge: 0, sweetT: -1,
     tackleCD: 0, jukeCD: 0, invuln: 0, oneTimer: 0, kickAnim: 0, wallCD: 0,
-    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0 },
+    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0 },
+    dodgeCD: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
     abilityCD: rand(2, 5), antic: null, anticCD: rand(4, 9), stretch: 0, stretchCD: rand(5, 10),
     bubble: null, expr: 'normal', exprT: 0, celebrate: false,
     human: null, ai: { t: 0, weave: 0, aimY: 0, chargeTarget: 1, wantSuper: false, sweetRelease: 0.5, wander: 0 },
@@ -43,7 +44,7 @@ function makePlayer(team, slot, role) {
   };
 }
 
-function makeTeam(side, cap, kit, humans, diffKey) {
+function makeTeam(side, cap, kit, humans, diffKey, gearKey = 'none') {
   const t = {
     side, dir: side === 0 ? 1 : -1, cap, kit, kit2: cap.color2, name: cap.team, score: 0, items: [],
     humans: humans.map(dev => ({ dev, player: null, cd: 0, color: HUMAN_COLORS[Input.order.indexOf(dev)] || '#fff', label: 'P' + (Input.order.indexOf(dev) + 1) })),
@@ -53,6 +54,11 @@ function makeTeam(side, cap, kit, humans, diffKey) {
   t.players.push(makePlayer(t, 0, 'captain'));
   for (let i = 1; i <= 3; i++) t.players.push(makePlayer(t, i, 'sidekick'));
   t.keeper = makePlayer(t, 4, 'keeper');
+  t.gear = 'none';
+  if (MECH.gear.enabled && GEAR[gearKey] && gearKey !== 'none') { // 6. gear stat trade-offs (outfield players only)
+    const g = GEAR[gearKey]; t.gear = gearKey;
+    for (const p of t.players) { p.speed *= g.speed; p.power *= g.power; p.tackleP *= g.tackle; }
+  }
   t.keeper.kit2 = colorDist(kit, '#2ee6a6') > 120 ? '#2ee6a6' : '#ffd43b';
   return t;
 }
@@ -63,14 +69,14 @@ function newMatch(cfg) {
   const kitL = capL.color;
   let kitR = capR.color;
   if (colorDist(kitL, kitR) < 110) kitR = capR.alt;
-  const t0 = makeTeam(0, capL, kitL, cfg.humansL || [], cfg.difficulty);
-  const t1 = makeTeam(1, capR, kitR, cfg.humansR || [], cfg.difficulty);
+  const t0 = makeTeam(0, capL, kitL, cfg.humansL || [], cfg.difficulty, cfg.gearL);
+  const t1 = makeTeam(1, capR, kitR, cfg.humansR || [], cfg.difficulty, cfg.gearR);
   M = {
     cfg, stadium, teams: [t0, t1], ball: null,
     phase: 'intro', phaseT: 0, time: 0, timeLeft: cfg.minutes * 60, golden: false, done: false,
     parts: [], hazards: [], projectiles: [], boxes: [], decals: [],
     cam: { x: FW / 2, y: FH / 2, zoom: 1, tx: FW / 2, ty: FH / 2, tz: 1 },
-    shake: 0, hitStop: 0, slowmo: 1, blackout: 0, flash: 0, flashCol: '#fff',
+    shake: 0, hitStop: 0, slowmo: 1, blackout: 0, orb: null, nextOrb: MECH.hyper.firstSpawn, hyper: null, notice: null, flash: 0, flashCol: '#fff',
     banner: null, bigText: null, comm: { text: '', t: 0, shown: 0, pri: 0 }, commCD: 0, idleT: 12,
     nextBox: rand(6, 9), nextHazard: rand(11, 15), crowdExcite: 0.2, crowd: null, kickTeam: rand() < 0.5 ? 0 : 1,
     cine: null, lastScorer: null, goalTeam: null, demo: !!cfg.demo,
@@ -159,6 +165,7 @@ function updateMatch(dt) {
   if (M.comm.t > 0) { M.comm.t -= dt; M.comm.shown += dt * 55; }
   if (M.bigText) { M.bigText.t += dt; if (M.bigText.t > M.bigText.life) M.bigText = null; }
   if (M.banner) { M.banner.t += dt; if (M.banner.t > M.banner.life) M.banner = null; }
+  if (M.notice) { M.notice.t += dt; if (M.notice.t > M.notice.life) M.notice = null; }
   for (const t of M.teams) t.itemFlash = Math.max(0, t.itemFlash - dt);
   if (M.blackout > 0) { M.blackout -= dt; if (M.blackout <= 0) { SFX.cheer(0.8); say(['UP NEPA! The light is back!', 'Light don come back! UP NEPA!'], {}, 2); } }
 
@@ -194,6 +201,9 @@ function updateMatch(dt) {
       break;
     case 'cine':
       updateCine(dt);
+      break;
+    case 'hyper':
+      updateHyper(dt);
       break;
     case 'goal':
       simulate(sdt, true);
@@ -254,6 +264,7 @@ function simulate(dt, frozenPlay = false) {
     checkGoal();
     if (M.cfg.items) updateBoxes(dt);
     if (M.cfg.items) teamItemAI(dt);
+    if (MECH.hyper.enabled) updateOrb(dt);
   }
   updateProjectiles(dt, frozenPlay);
   updateHazards(dt, frozenPlay);
@@ -310,13 +321,13 @@ function updateHumans(t, dt) {
   }
 }
 
-function blankCmd() { return { mx: 0, my: 0, pass: false, shootDown: false, shootPressed: false, tackle: false, item: false, ability: false, aimY: null, passTo: null, faceTo: null }; }
+function blankCmd() { return { mx: 0, my: 0, pass: false, shootDown: false, shootPressed: false, tackle: false, tackleDown: false, dodge: false, item: false, ability: false, aimY: null, passTo: null, faceTo: null }; }
 function humanCmd(dev, p) {
   const c = blankCmd();
   c.mx = dev.mx; c.my = dev.my;
   c.pass = dev.pass.pressed && M.ball.owner === p;
   c.shootDown = dev.shoot.down; c.shootPressed = dev.shoot.pressed;
-  c.tackle = dev.tackle.pressed; c.item = dev.item.pressed; c.ability = dev.ability.pressed;
+  c.tackle = dev.tackle.pressed; c.tackleDown = dev.tackle.down; c.dodge = dev.dodge.pressed; c.item = dev.item.pressed; c.ability = dev.ability.pressed;
   c.aimY = Math.abs(dev.my) > 0.3 ? dev.my : 0;
   return c;
 }
@@ -343,10 +354,12 @@ function applyCmd(p, cmd, dt) {
   const owner = b.owner === p;
 
   if (cmd.item && M.cfg.items && p.team.items.length) useItem(p.team, p);
+  if (cmd.ability && MECH.hyper.enabled && p.hasOrb && owner) { tryHyper(p); return; } // 5. hyper strike takes over POWER while holding the orb + ball
   if (cmd.ability) { useAbility(p); if (!canAct(p)) return; }
+  if (cmd.dodge && MECH.dodge.enabled && startDodge(p, cmd)) return;                 // 1. timed dodge
 
   // shooting
-  if (owner && cmd.shootPressed && !p.charging) { p.charging = true; p.charge = 0; p.sweetT = -1; }
+  if (owner && cmd.shootPressed && !p.charging) { p.charging = true; p.charge = 0; p.sweetT = -1; p.chargeT = 0; }
   if (!owner && cmd.shootPressed) {
     const approaching = !b.owner && (b.passTarget === p || (dist(p.x, p.y, b.x, b.y) < 300 && (b.vx * (p.x - b.x) + b.vy * (p.y - b.y)) > 0));
     if (approaching) p.oneTimer = 0.55;
@@ -355,6 +368,7 @@ function applyCmd(p, cmd, dt) {
     if (!owner) { p.charging = false; p.charge = 0; p.sweetT = -1; }
     else {
       const prev = p.charge;
+      p.chargeT += dt;
       p.charge = Math.min(1, p.charge + dt / CHARGE_TIME);
       if (Math.floor(prev * 6) !== Math.floor(p.charge * 6)) SFX.charge(p.charge);
       if (p.charge >= 1 && inSuperRange(p)) {
@@ -367,6 +381,8 @@ function applyCmd(p, cmd, dt) {
           if (Math.abs(sweetRing(p.sweetT) - 1) < 0.22) { startSuper(p, cmd.aimY); return; }
           bubble(p, pick(['MISTIMED!', 'BOTCHED IT!', 'ARGH!'])); shoot(p, 1, cmd.aimY); return;
         }
+        const C2 = MECH.charge; // 2. perfect-window shot (super-strike ring above keeps priority for captains)
+        if (C2.enabled && p.chargeT >= C2.shotPerfectStart && p.chargeT <= C2.shotPerfectEnd) { shoot(p, 1, cmd.aimY, false, true); return; }
         shoot(p, Math.max(0.35, p.charge), cmd.aimY); return;
       }
     }
@@ -384,18 +400,82 @@ function applyCmd(p, cmd, dt) {
       if (Math.random() < 0.3) say(COMMENTARY.juke, { p: p.name });
       return;
     }
-    if (!owner && p.tackleCD <= 0) {
-      let a = p.face;
-      if (cmd.faceTo) a = Math.atan2(cmd.faceTo.y - p.y, cmd.faceTo.x - p.x);
-      else { const m = Math.hypot(cmd.mx, cmd.my); if (m > 0.2) a = Math.atan2(cmd.my, cmd.mx); }
-      p.face = a; p.state = 'tackle'; p.stateT = 0.3; p.tackleCD = 0.85; p.hitList = [];
-      const sp = p.speed * (1.95 + p.tackleP * 0.2);
-      p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
-      SFX.tackle();
-      return;
+    if (!owner && p.tackleCD <= 0 && !p.tCharging) {
+      if (MECH.charge.enabled && p.human) { p.tCharging = true; p.tCharge = 0; } // 2. hold to charge (humans)
+      else { doTackle(p, cmd, false); return; }
     }
   }
-  moveP(p, cmd.mx, cmd.my, dt, 1);
+  if (p.tCharging) {
+    const C2 = MECH.charge;
+    if (owner) p.tCharging = false;
+    else {
+      p.tCharge += dt;
+      if (!cmd.tackleDown || p.tCharge >= C2.tackleMaxHold) {
+        const perfect = !cmd.tackleDown && p.tCharge >= C2.tacklePerfectStart && p.tCharge <= C2.tacklePerfectEnd;
+        p.tCharging = false; doTackle(p, cmd, perfect); return;
+      }
+    }
+  }
+  moveP(p, cmd.mx, cmd.my, dt, p.tCharging ? 0.8 : 1);
+}
+
+function doTackle(p, cmd, perfect) {
+  let a = p.face;
+  if (cmd.faceTo) a = Math.atan2(cmd.faceTo.y - p.y, cmd.faceTo.x - p.x);
+  else { const m = Math.hypot(cmd.mx, cmd.my); if (m > 0.2) a = Math.atan2(cmd.my, cmd.mx); }
+  p.face = a; p.state = 'tackle'; p.stateT = perfect ? 0.36 : 0.3; p.tackleCD = 0.85; p.hitList = [];
+  p.tacklePerfect = !!perfect;
+  const sp = p.speed * (1.95 + p.tackleP * 0.2) * (perfect ? MECH.charge.tacklePerfectSpeed : 1);
+  p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
+  SFX.tackle();
+  if (perfect) { floatText(p.x, p.y, 95, 'POWER TACKLE!', '#ff922b', 24); SFX.bonk(); }
+}
+
+// ---- 1. TIMED DODGE BOOST
+function tacklerThreat(p) {
+  const R = MECH.dodge.perfectRadius;
+  for (const o of other(p.team).players) {
+    if (o.state !== 'tackle') continue;
+    const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy);
+    if (d < R && (o.vx * dx + o.vy * dy) > 0) return o;
+  }
+  return null;
+}
+function perfectDodge(p) {
+  if (p.dodgePerfect) return;
+  p.dodgePerfect = true; p.fx.boost = MECH.dodge.boostTime;
+  floatText(p.x, p.y, 105, 'PERFECT DODGE!', '#63e6be', 26); SFX.pickup();
+  if (p.human) Input.rumble(p.human, 140, 0.3, 0.8);
+}
+function startDodge(p, cmd) {
+  const C = MECH.dodge;
+  if (p.dodgeCD > 0 || !canAct(p)) return false;
+  const m = Math.hypot(cmd.mx, cmd.my);
+  const a = m > 0.2 ? Math.atan2(cmd.my, cmd.mx) : p.face + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
+  p.state = 'dodge'; p.stateT = C.dashTime; p.dodgeCD = C.cooldown; p.invuln = Math.max(p.invuln, C.invulnTime);
+  p.tCharging = false; p.dodgePerfect = false;
+  p.vx = Math.cos(a) * p.speed * C.dashSpeedMult; p.vy = Math.sin(a) * p.speed * C.dashSpeedMult;
+  if (tacklerThreat(p)) perfectDodge(p); // pressed just as a tackle comes in
+  burst(p.x, p.y, 20, 8, '#63e6be', 140, 'smoke', 8, 0.35, 0);
+  SFX.tone(700, 0.12, 'triangle', 0.1, 1300);
+  return true;
+}
+
+// ---- 4. OFF-BALL TACKLE PENALTY
+function offBallPenalty(tackler, victim) {
+  const T = victim.team, C = MECH.offBall;
+  let line;
+  if (M.cfg.items) {
+    const key = randomItem(T), it = ITEMS[key];
+    if (T.items.length < 2) { T.items.push(key); T.itemFlash = 0.8; SFX.pickup(); line = `${it.icon} ${T.cap.short.toUpperCase()}'S TEAM GET A FREE ${it.name.toUpperCase()}`; }
+    else {
+      const user = T.players.filter(q => canAct(q)).sort((a, q) => dist(a.x, a.y, victim.x, victim.y) - dist(q.x, q.y, victim.x, victim.y))[0];
+      if (user) { T.items.unshift(key); useItem(T, user); line = `${it.icon} POCKETS FULL: FREE ${it.name.toUpperCase()} FIRED OFF AT ONCE`; }
+      else line = 'NO ONE LEFT STANDING TO USE THE FREE ITEM';
+    }
+  } else line = 'POWER-UPS ARE OFF, SO NO FREE ITEM';
+  M.notice = { title: 'OFF-BALL FOUL!', text: `${tackler.name} flattened ${victim.name} away from the ball`, sub: line, t: 0, life: C.noticeTime, color: T.kit };
+  part({ x: victim.x, y: victim.y, z: 2, life: 0.6, max: 0.6, size: 140, color: '#ff4d4d', kind: 'ring' });
 }
 
 function moveP(p, mx, my, dt, mul) {
@@ -403,12 +483,13 @@ function moveP(p, mx, my, dt, mul) {
   let max = p.speed * mul * p.team.ai.speed ** (p.human ? 0 : 1);
   if (p.fx.fire > 0) max *= 1.45;
   if (p.fx.wind > 0) max *= 1.6;
+  if (p.fx.boost > 0) max *= MECH.dodge.boostMult;
   if (p.fx.shrink > 0) max *= 0.75;
   if (p.fx.mega > 0) max *= 1.05;
   if (owner) max *= 0.93;
   if (p.charging) max *= 0.35;
   if (p.state === 'recover') max *= 0.4;
-  const grip = (p.fx.fire > 0 || p.fx.mega > 0 || p.fx.wind > 0) ? 1 : M.stadium.playerGrip;
+  const grip = (p.fx.fire > 0 || p.fx.mega > 0 || p.fx.wind > 0 || p.fx.boost > 0) ? 1 : M.stadium.playerGrip;
   const acc = 13 * grip;
   const m = Math.hypot(mx, my);
   let tvx = 0, tvy = 0;
@@ -432,7 +513,7 @@ function releaseBall(p) {
   b.lockP = p; b.lockT = 0.22; b.lastTouch = p;
 }
 
-function shoot(p, charge, aimY = null, perfect = false) {
+function shoot(p, charge, aimY = null, perfect = false, breaker = false) {
   const b = M.ball, T = p.team, O = other(T);
   releaseBall(p);
   const gx = goalXOf(T), dg = dist(b.x, b.y, gx, FH / 2);
@@ -444,12 +525,13 @@ function shoot(p, charge, aimY = null, perfect = false) {
   ty += rand(-1, 1) * spread;
   const tx = gx + T.dir * 25;
   const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1;
-  const speed = (880 + 1150 * charge) * p.power * (p.fx.mega > 0 ? 1.3 : 1) * (perfect ? 1.18 : 1);
+  const speed = (880 + 1150 * charge) * p.power * (p.fx.mega > 0 ? 1.3 : 1) * (perfect ? 1.18 : 1) * (breaker ? MECH.charge.shotPerfectPower : 1);
   b.vx = dx / d * speed; b.vy = dy / d * speed;
   b.vz = 70 + charge * rand(80, 200);
   b.spin = rand(-1, 1) * 240 * charge;
-  b.shot = { team: T, by: p, speed, t: 0 };
+  b.shot = { team: T, by: p, speed, t: 0, breaker };
   b.passTarget = null; b.keeperIgnore = null;
+  if (breaker) { floatText(p.x, p.y, 100, 'PERFECT STRIKE!', '#ffd43b', 28); shake(9); SFX.superFire(); }
   p.charging = false; p.charge = 0; p.sweetT = -1; p.kickAnim = 0.25; p.stats.shots++;
   SFX.kick(charge); shake(2 + charge * 6);
   if (p.human) Input.rumble(p.human, 60 + charge * 140, charge * 0.8, 0.3 + charge * 0.4);
@@ -556,13 +638,14 @@ function wallEffect(p, nx, ny) {
 
 function updatePlayer(p, dt) {
   p.anim += dt;
-  p.tackleCD -= dt; p.jukeCD -= dt; p.abilityCD -= dt; if (p.notReadyT) p.notReadyT = Math.max(0, p.notReadyT - dt); p.stretchCD -= dt; p.stretch = Math.max(0, p.stretch - dt); p.invuln -= dt; p.oneTimer -= dt; p.kickAnim -= dt; p.wallCD -= dt;
+  p.tackleCD -= dt; p.jukeCD -= dt; p.abilityCD -= dt; p.dodgeCD -= dt; if (p.notReadyT) p.notReadyT = Math.max(0, p.notReadyT - dt); p.stretchCD -= dt; p.stretch = Math.max(0, p.stretch - dt); p.invuln -= dt; p.oneTimer -= dt; p.kickAnim -= dt; p.wallCD -= dt;
   for (const k in p.fx) if (p.fx[k] > 0) p.fx[k] = Math.max(0, p.fx[k] - dt);
   if (p.bubble) { p.bubble.t -= dt; if (p.bubble.t <= 0) p.bubble = null; }
   const ts = p.fx.mega > 0 ? 1.85 : p.fx.shrink > 0 ? 0.55 : 1;
   p.scale += (ts - p.scale) * Math.min(1, dt * 6);
   p.r = p.baseR * p.scale;
   if (p.fx.fire > 0 && Math.random() < dt * 30) part({ x: p.x + rand(-8, 8), y: p.y + rand(-4, 4), z: rand(0, 10), vz: rand(60, 140), life: 0.5, max: 0.5, size: rand(6, 11), color: pick(['#ff6a00', '#ffd43b', '#ff2200']), kind: 'flame' });
+  if (p.fx.boost > 0 && Math.random() < dt * 25) part({ x: p.x, y: p.y, z: rand(5, 40), vx: -p.vx * 0.3, vy: -p.vy * 0.3, life: 0.3, max: 0.3, size: rand(3, 6), color: '#63e6be', kind: 'smoke' });
   if (p.fx.wind > 0 && Math.random() < dt * 30) part({ x: p.x - p.vx * 0.05, y: p.y, z: rand(5, 45), vx: -p.vx * 0.3, vy: -p.vy * 0.3, life: 0.35, max: 0.35, size: rand(4, 8), color: '#ffffff', kind: 'smoke' });
   if (p.fx.soot > 0 && Math.random() < dt * 4) part({ x: p.x, y: p.y, z: 60 * p.scale, vz: 50, life: 1.2, max: 1.2, size: 10, color: '#555', kind: 'smoke' });
 
@@ -583,9 +666,10 @@ function updatePlayer(p, dt) {
       if (Math.random() < dt * 40) part({ x: p.x, y: p.y, z: 2, vx: -p.vx * 0.1, vy: -p.vy * 0.1, life: 0.4, max: 0.4, size: 7, color: M.stadium.id === 'kili' ? '#ffffff' : M.stadium.id === 'sahara' ? '#e9c98b' : '#a5d6a7', kind: 'smoke' });
       if (p.stateT <= 0) { p.state = 'recover'; p.stateT = 0.3; }
       break;
-    case 'recover': case 'juke':
+    case 'recover': case 'juke': case 'dodge':
       p.stateT -= dt;
-      if (p.state === 'juke') { p.vx *= Math.exp(-2 * dt); p.vy *= Math.exp(-2 * dt); }
+      if (p.state === 'dodge' && Math.random() < 0.5) part({ x: p.x, y: p.y, z: 30, life: 0.25, max: 0.25, size: 14, color: '#63e6be', kind: 'smoke' });
+      if (p.state === 'juke' || p.state === 'dodge') { p.vx *= Math.exp(-2 * dt); p.vy *= Math.exp(-2 * dt); }
       if (p.stateT <= 0) p.state = 'normal';
       break;
     case 'frozen':
@@ -657,6 +741,7 @@ function contactInteractions(dt) {
     const powered = p.fx.mega > 0 || p.fx.fire > 0;
     if (p.state !== 'tackle' && !powered) continue;
     for (const v of other(p.team).players) {
+      if (p.state === 'tackle' && v.state === 'dodge' && dist(p.x, p.y, v.x, v.y) < (p.r + v.r) * 1.15) perfectDodge(v); // 1. tackle met a dodge
       if (!isUp(v) || v.invuln > 0 || v.z > 40) continue;
       if (p.hitList && p.hitList.includes(v) && p.state === 'tackle') continue;
       const d = dist(p.x, p.y, v.x, v.y);
@@ -679,8 +764,12 @@ function contactInteractions(dt) {
         break;
       }
       const hadBall = b.owner === v;
-      const ballNear = hadBall || dist(v.x, v.y, b.x, b.y) < 170;
-      knock(v, p.vx * 0.75, p.vy * 0.75, 0.9 + 0.35 * p.tackleP * (v.fx.shrink > 0 ? 1.5 : 1), 'tackle');
+      const C4 = MECH.offBall;
+      const nearDist = C4.enabled ? C4.distMetres * C4.unitsPerMetre : 170;
+      const ballNear = hadBall || dist(v.x, v.y, b.x, b.y) < nearDist || (C4.enabled && b.passTarget === v);
+      const force = p.tacklePerfect ? MECH.charge.tacklePerfectForce : 1;
+      const downFor = MECH.immobilize.enabled ? MECH.immobilize.duration : 0.9 + 0.35 * p.tackleP * (v.fx.shrink > 0 ? 1.5 : 1); // 3. immobilize
+      knock(v, p.vx * 0.75 * force, p.vy * 0.75 * force, downFor, 'tackle');
       p.stats.tackles++;
       if (p.human) Input.rumble(p.human, 120, 0.6, 0.6);
       M.hitStop = 0.05; shake(7);
@@ -692,7 +781,7 @@ function contactInteractions(dt) {
       } else if (!ballNear) {
         p.stats.cheap++;
         floatText(v.x, v.y, 80, 'CHEAP SHOT!', '#ff6b6b', 30);
-        if (M.cfg.items) giveItem(v.team, randomItem(v.team));
+        if (C4.enabled) offBallPenalty(p, v); else if (M.cfg.items) giveItem(v.team, randomItem(v.team));
         say(COMMENTARY.cheap, { p: p.name, v: v.name, o: v.team.name }, 2);
       } else {
         floatText(v.x, v.y, 70, pick(['OOF!', 'SPLAT!', 'BONK!']), '#ffffff', 28);
@@ -703,7 +792,7 @@ function contactInteractions(dt) {
   // ball owner validity
   if (b.owner) {
     const o = b.owner;
-    if (o.role !== 'keeper' && !canAct(o) && o.state !== 'juke') { b.owner = null; b.lockP = o; b.lockT = 0.3; }
+    if (o.role !== 'keeper' && !canAct(o) && o.state !== 'juke' && o.state !== 'dodge') { b.owner = null; b.lockP = o; b.lockT = 0.3; }
   }
   b.lockT -= dt;
   b.pickupInv -= dt;
@@ -868,7 +957,7 @@ function scoreGoal(team) {
   const sup = b.super;
   b.super = null;
   if (b.owner) b.owner = null;
-  team.score++;
+  team.score += (sup && sup.points) || 1;
   M.phase = 'goal'; M.phaseT = 0; M.goalTeam = team;
   M.slowmo = 0.22; M.hitStop = 0.14; shake(22); flash(0.7, '#ffffff');
   const scorer = b.lastTouch || team.players[0];
@@ -881,7 +970,7 @@ function scoreGoal(team) {
   const gx = team.dir > 0 ? FW : 0;
   for (let i = 0; i < 70; i++) part({ x: gx + rand(-60, 60), y: FH / 2 + rand(-160, 160), z: rand(40, 160), vx: rand(-300, 300), vy: rand(-300, 300), vz: rand(200, 700), g: 500, life: rand(1.5, 3), max: 3, size: rand(5, 9), color: pick(['#ff6b6b', '#ffd43b', '#4dabf7', '#51cf66', '#f783ac', '#ffffff', team.kit]), kind: 'confetti', rot: rand(0, TAU), vr: rand(-12, 12), drag: 1.5 });
   const golden = M.golden;
-  M.bigText = { str: own ? 'OWN GOAL!' : (golden ? 'GOLDEN GOAL!' : 'GOOOAL!'), sub: own ? `${scorer.name} is in disgrace!` : `${scorer.name} — ${team.name}`, t: 0, life: 3.4, color: own ? '#ff8787' : (golden ? '#ffd84a' : '#ffffff'), team };
+  M.bigText = { str: own ? 'OWN GOAL!' : (sup && sup.points > 1 ? `HYPER GOAL +${sup.points}!` : golden ? 'GOLDEN GOAL!' : 'GOOOAL!'), sub: own ? `${scorer.name} is in disgrace!` : `${scorer.name} — ${team.name}`, t: 0, life: 3.4, color: own ? '#ff8787' : (golden ? '#ffd84a' : '#ffffff'), team };
   if (own) say(COMMENTARY.ownGoal, { p: scorer.name, t: team.name }, 3);
   else if (sup) say(COMMENTARY.superGoal, { p: scorer.name, s: sup.name }, 3);
   else say(COMMENTARY.goal, { p: scorer.name, t: team.name, o: conceded.name }, 3);
@@ -1009,9 +1098,12 @@ function keeperContact(k) {
   let p = isShot ? clamp(1.42 - sp / 2000, 0.2, 0.92) * T.ai.keeper : 1;
   if (k.state === 'dive') p += 0.08;
   if (k.stretch > 0) p = Math.max(p, 0.6);
+  const breaker = isShot && b.shot.breaker;
+  if (breaker) p *= MECH.charge.keeperSaveMult;
   if (Math.random() < p) {
     const goalSide = -T.dir;
-    if (sp < 760 || Math.random() < 0.35) {
+    if (breaker) { k.state = 'down'; k.stateT = 1.1; k.vx = -goalSide * -260; k.vz = 220; k.expr = 'hurt'; floatText(k.x, k.y, 120, 'KEEPER BROKEN!', '#ffd43b', 26); }
+    if (!breaker && (sp < 760 || Math.random() < 0.35)) {
       b.owner = k; b.lastTouch = k; b.vx = b.vy = b.vz = 0; b.shot = null; b.passTarget = null;
       if (k.state !== 'dive') k.state = 'hold'; k.holdAfterDive = true; k.stateT = 0.9;
       if (k.state === 'dive') { k.state = 'hold'; k.stateT = 1.0; }
@@ -1088,9 +1180,11 @@ function aiCmd(p, dt) {
     if (aiWantsAbility(p) && Math.random() < 0.55 * D.item) { cmd.ability = true; }
   }
 
+  if (MECH.dodge.enabled && p.dodgeCD <= 0 && tacklerThreat(p) && Math.random() < 0.3 * D.acc) cmd.dodge = true;
   if (b.owner === p) {
     const dg = dist(p.x, p.y, gx, gy);
     const th = nearestOpp(p);
+    if (MECH.hyper.enabled && p.hasOrb && dg < MECH.hyper.maxGoalDist && hyperZoneClear(T) && Math.random() < dt * 3) { cmd.ability = true; return cmd; }
     if (p.charging) {
       cmd.shootDown = true;
       if (p.sweetT >= 0) { if (p.sweetT >= p.ai.sweetRelease) cmd.shootDown = false; }
@@ -1276,6 +1370,7 @@ function superPos(s, u) {
       z = 30 + Math.sin(w * Math.PI) * 60; break;
     }
     case 'dance': { q = lp(u); const off = Math.sin(u * Math.PI * 8) * 35; q.x += nx * off; q.y += ny * off; z = 12 + Math.abs(Math.sin(u * Math.PI * 6)) * 50; break; }
+    case 'hyperArc': q = lp(u); z = 22 + 760 * 4 * u * (1 - u); break; // 5. dramatic arc into the net
     default: q = lp(u); z = 24;
   }
   return { x: q.x, y: q.y, z };
@@ -1353,6 +1448,115 @@ function updateSuper(dt) {
     b.super = null;
     b.superDone = s;
     checkGoal();
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  5. HYPER STRIKE (ultimate): orb pickup -> clear zone -> charge -> quick-time event -> cutscene -> +2
+//  To add a character-specific strike: add an entry to HYPER_STRIKES and set `hyper: '<key>'`
+//  on that captain in data.js. Captains without one use 'powerKick'.
+// ---------------------------------------------------------------------------
+const HYPER_STRIKES = {
+  powerKick: {
+    name: 'POWER KICK',
+    launch(p) { // the ball rockets up in a huge arc and drops into the net
+      const T = p.team, O = other(T), b = M.ball, gx = goalXOf(T);
+      const S = { x: b.x, y: b.y }, E = { x: gx + T.dir * 48, y: FH / 2 + rand(-40, 40) };
+      releaseBall(p); p.kickAnim = 0.3;
+      b.super = { type: 'hyperArc', name: 'HYPER STRIKE', S, E, L: dist(S.x, S.y, E.x, E.y), D: 1.6, t: 0, saved: false, by: p, team: T, keeper: O.keeper, resolved: false, side: 1, prevK: 0, decoys: [], points: MECH.hyper.points };
+      b.lastTouch = p; b.owner = null; b.shot = { team: T, by: p, speed: 1800, t: 0 };
+      SFX.superFire(); shake(18); flash(0.5, '#ffd43b');
+    },
+  },
+};
+function hyperZoneClear(T) {
+  const H = MECH.hyper, gx = goalXOf(T);
+  return !other(T).players.some(o => isUp(o) && Math.abs(o.x - gx) < H.zoneDepth && Math.abs(o.y - FH / 2) < H.zoneHalfWidth);
+}
+function updateOrb(dt) {
+  const H = MECH.hyper;
+  if (M.all.some(p => p.hasOrb)) return;
+  if (!M.orb) {
+    M.nextOrb -= dt;
+    if (M.nextOrb <= 0) { M.orb = { x: rand(FW * 0.3, FW * 0.7), y: rand(FH * 0.2, FH * 0.8), z: 500, vz: 0, t: 0 }; say(['A HYPER ORB has appeared! Grab it!', 'The HYPER ORB! Whoever gets it can score TWO!'], {}, 2); SFX.superCharge(); }
+    return;
+  }
+  const o = M.orb; o.t += dt;
+  if (o.z > 0) { o.vz -= 600 * dt; o.z = Math.max(0, o.z + o.vz * dt); }
+  if (o.z > 40) return;
+  for (const p of M.outfield) {
+    if (!canAct(p) && p.state !== 'tackle') continue;
+    if (dist(p.x, p.y, o.x, o.y) < p.r + H.pickupRadius) {
+      p.hasOrb = true; M.orb = null; M.nextOrb = H.spawnEvery;
+      floatText(p.x, p.y, 110, '🔮 HYPER ORB!', '#d0a6ff', 28); SFX.pickup(); burst(p.x, p.y, 30, 20, ['#b26bff', '#ffd43b', '#fff'], 260, 'star', 6, 0.6, 200);
+      if (p.human) Input.rumble(p.human, 200, 0.4, 0.8);
+      say([`${p.name} has the HYPER ORB! Clear the box and go for two!`], {}, 2);
+      return;
+    }
+  }
+}
+function tryHyper(p) {
+  const H = MECH.hyper;
+  if (dist(p.x, p.y, goalXOf(p.team), FH / 2) > H.maxGoalDist) { floatText(p.x, p.y, 100, 'GET CLOSER TO GOAL!', '#d0a6ff', 20, 0.8); return; }
+  if (!hyperZoneClear(p.team)) { floatText(p.x, p.y, 100, 'ZONE NOT CLEAR!', '#ff8787', 22, 0.8); SFX.uiBack(); return; }
+  const steps = []; for (let i = 0; i < H.qteSteps; i++) steps.push(pick(['pass', 'shoot', 'tackle', 'item']));
+  const pAll = H.aiSuccess[p.team.diffKey] || 0.6;
+  M.phase = 'hyper'; M.phaseT = 0;
+  M.hyper = { p, stage: 'charge', t: 0, charge: 0, steps, idx: 0, stepT: 0, ct: 0, aiP: Math.pow(pAll, 1 / H.qteSteps), aiDelay: rand(0.25, 0.6) };
+  p.vx = p.vy = 0; p.charging = false; p.tCharging = false;
+  flash(0.35, '#b26bff'); SFX.superCharge(); excite(1);
+}
+function hyperFail(msg) {
+  const h = M.hyper, p = h.p, b = M.ball;
+  p.hasOrb = false; M.hyper = null; M.phase = 'play'; M.phaseT = 0;
+  floatText(p.x, p.y, 110, msg, '#ff8787', 26, 1.2); SFX.groan();
+  const opp = other(p.team).players.filter(isUp).sort((a, q) => dist(a.x, a.y, p.x, p.y) - dist(q.x, q.y, p.x, p.y))[0];
+  if (opp) { b.owner = opp; b.lastTouch = opp; b.pickupInv = 0.8; b.shot = null; opp.invuln = 0.8; }
+  say([`HYPER STRIKE FAILED! ${other(p.team).name} take the ball!`], {}, 2);
+}
+function updateHyper(dt) {
+  const h = M.hyper, H = MECH.hyper, p = h.p;
+  h.t += dt; p.anim += dt;
+  if (Math.random() < 0.6) { const a = rand(0, TAU); part({ x: p.x + Math.cos(a) * 60, y: p.y + Math.sin(a) * 30, z: rand(0, 70), vx: -Math.cos(a) * 120, vy: -Math.sin(a) * 60, vz: 40, life: 0.5, max: 0.5, size: rand(4, 8), color: pick(['#b26bff', '#ffd43b', '#ffffff']), kind: 'spark' }); }
+  updateParticles(dt);
+  const dev = p.human ? Input.devices[p.human] : null;
+  if (h.stage === 'charge') {
+    if (dev) { if (dev.ability.down) h.charge += dt; else h.charge = Math.max(0, h.charge - dt * 0.5); }
+    else h.charge += dt;
+    if (h.charge >= H.chargeTime) { h.stage = 'qte'; h.stepT = 0; SFX.uiConfirm(); }
+    else if (h.t > H.chargeTimeout) hyperFail('TOO SLOW!');
+    return;
+  }
+  if (h.stage === 'qte') {
+    h.stepT += dt;
+    const want = h.steps[h.idx];
+    let ok = null;
+    if (dev) { const pressed = ['pass', 'shoot', 'tackle', 'item'].filter(k => dev[k].pressed); if (pressed.length) ok = pressed.includes(want); }
+    else if (h.stepT > h.aiDelay) { ok = Math.random() < h.aiP; h.aiDelay = rand(0.25, 0.6); }
+    if (ok === false) { hyperFail('WRONG BUTTON!'); return; }
+    if (ok) {
+      h.idx++; h.stepT = 0; SFX.ui(); if (dev) Input.rumble(p.human, 60, 0.3, 0.3);
+      if (h.idx >= h.steps.length) {
+        h.stage = 'cutscene'; h.ct = 0;
+        const strike = HYPER_STRIKES[p.team.cap.hyper] || HYPER_STRIKES.powerKick;
+        M.banner = { cap: p.team.cap, team: p.team, name: 'HYPER STRIKE: ' + strike.name, t: 0, life: H.cutsceneTime + 0.2 };
+        flash(0.5, '#ffd43b'); SFX.superCharge(); SFX.vuvuzela(1.5);
+      }
+      return;
+    }
+    if (h.stepT > H.qteStepTime) hyperFail('TOO SLOW!');
+    return;
+  }
+  if (h.stage === 'cutscene') {
+    h.ct += dt;
+    if (p.z < 80) p.z += dt * 120;
+    if (h.ct > H.cutsceneTime) {
+      p.z = 0; p.hasOrb = false;
+      const strike = HYPER_STRIKES[p.team.cap.hyper] || HYPER_STRIKES.powerKick;
+      M.hyper = null; M.phase = 'play'; M.phaseT = 0;
+      strike.launch(p);
+      say([`${p.name} lands the HYPER STRIKE! That's worth TWO!`], {}, 3);
+    }
   }
 }
 
@@ -1886,6 +2090,7 @@ function updateCamera(dt) {
   const hums = M.teams.flatMap(t => t.humans.map(h => h.player).filter(Boolean));
   if (hums.length === 1 && M.phase === 'play') { tx = lerp(b.x, hums[0].x, 0.25); ty = lerp(b.y, hums[0].y, 0.25); }
   if (M.phase === 'cine' && M.cine) { tx = M.cine.p.x; ty = M.cine.p.y; tz = base * 1.5; }
+  else if (M.phase === 'hyper' && M.hyper) { tx = M.hyper.p.x; ty = M.hyper.p.y; tz = base * 1.4; }
   else if (M.phase === 'goal' && M.phaseT < 2.5) { tz = base * 1.22; }
   else if (b.super) { tz = base * 1.1; }
   else if (M.phase === 'intro') { tx = FW / 2; ty = FH / 2; }
