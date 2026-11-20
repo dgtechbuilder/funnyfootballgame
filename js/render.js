@@ -120,6 +120,18 @@ function renderMatch(c) {
     }
   }
 
+  // 5. hyper zone: shown while someone holds the orb (green = clear, red = defenders inside)
+  if (MECH.hyper.enabled) {
+    const holder = M.all.find(p => p.hasOrb);
+    if (holder) {
+      const H = MECH.hyper, T = holder.team, gx = goalXOf(T), x2 = gx - T.dir * H.zoneDepth, clear = hyperZoneClear(T);
+      c.setLineDash([10, 8]);
+      quad(c, [P3(gx, FH / 2 - H.zoneHalfWidth), P3(x2, FH / 2 - H.zoneHalfWidth), P3(x2, FH / 2 + H.zoneHalfWidth), P3(gx, FH / 2 + H.zoneHalfWidth)], clear ? 'rgba(80,255,120,0.12)' : 'rgba(255,60,60,0.14)', clear ? '#51cf66' : '#ff4d4d', 3);
+      c.setLineDash([]);
+    }
+    if (M.orb) groundEllipse(c, M.orb.x, M.orb.y, 22 * clamp(1 - M.orb.z / 600, 0.3, 1), 'rgba(120,40,200,0.35)');
+  }
+
   // shadows + ground rings
   const b = M.ball;
   for (const p of M.all) {
@@ -150,6 +162,7 @@ function renderMatch(c) {
   for (const p of M.all) if (!p.hidden) D.push({ y: p.y, f: () => drawPlayerEnt(c, p) });
   D.push({ y: b.y + 0.1, f: () => drawBallEnt(c) });
   for (const bx of M.boxes) D.push({ y: bx.y, f: () => drawBox(c, bx) });
+  if (M.orb) D.push({ y: M.orb.y, f: () => drawOrb(c, PX(M.orb.x, M.orb.y, M.orb.z + 30), PY(M.orb.y, M.orb.z + 30 + Math.sin(M.time * 4) * 6), 20 * KZ(M.orb.y)) });
   for (const q of M.projectiles) D.push({ y: q.y, f: () => drawProjectile(c, q) });
   for (const h of M.hazards) {
     if (h.type === 'animal') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x, h.y), PY(h.y, h.r * 1.0 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), h.r * 2.5 * KZ(h.y), !h.flip) });
@@ -350,7 +363,7 @@ function drawPlayerEnt(c, p) {
     tint: p.fx.zap > 0 ? 'zap' : p.state === 'frozen' ? 'ice' : p.fx.soot > 0 ? 'soot' : null,
     lying: p.state === 'down' || tackling || p.state === 'dive',
     lyingDir: tackling ? sign(Math.cos(p.face)) * 0.55 : p.state === 'dive' ? p.lyingDir * 0.9 : p.lyingDir,
-    spin: p.state === 'spin' || p.state === 'juke', flat: p.fx.flat > 0 ? Math.min(1, p.fx.flat) : 0,
+    spin: p.state === 'spin' || p.state === 'juke' || p.state === 'dodge', flat: p.fx.flat > 0 ? Math.min(1, p.fx.flat) : 0,
     dance: p.state === 'dance', armsUp: p.armsUp || p.state === 'panic' || p.state === 'abducted',
     kick: p.kickAnim > 0 ? 1 - p.kickAnim / 0.25 : 0, stretch: p.stretch > 0, ears: p.state === 'ears',
   };
@@ -383,6 +396,12 @@ function drawPlayerOverlay(c, p) {
     if (p.abilityCD <= 0) drawEmoji(c, (p.role === 'captain' ? p.team.cap.signature : p.team.cap.squad).icon, x + 24, ty - 22, 18, false, Math.sin(M.time * 6) * 0.25);
     if (p.humanH.switchFx > 0) { c.globalAlpha = p.humanH.switchFx * 2; c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.arc(x, y - 30 * s, 40 * s * (1.5 - p.humanH.switchFx), 0, TAU); c.stroke(); c.globalAlpha = 1; }
   }
+  if (p.hasOrb) drawOrb(c, x - 26 * s, top + 4, 9 * s);
+  if (MECH.charge.enabled && p.human) { // 2. hold meters with the sweet spot marked
+    const C = MECH.charge;
+    if (p.charging && p.sweetT < 0) drawHoldMeter(c, x, y + 16 * s, s, p.chargeT, C.shotPerfectStart, C.shotPerfectEnd, '#ffd43b', 'SHOT');
+    if (p.tCharging) drawHoldMeter(c, x, y + 16 * s, s, p.tCharge, C.tacklePerfectStart, C.tacklePerfectEnd, '#ff922b', 'TACKLE');
+  }
   if (p.bubble) {
     const b = p.bubble, a = Math.min(1, b.t * 4), sc = Math.min(1, (b.max - b.t) * 8);
     c.save(); c.globalAlpha = a;
@@ -396,6 +415,23 @@ function drawPlayerOverlay(c, p) {
   }
 }
 
+function drawOrb(c, x, y, r) {
+  const g = c.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  g.addColorStop(0, '#fff7c2'); g.addColorStop(0.45, '#d08cff'); g.addColorStop(1, '#6a1bb5');
+  circle(c, x, y, r * 1.6, 'rgba(208,140,255,0.25)');
+  circle(c, x, y, r, g, '#ffd43b', Math.max(1, r * 0.12));
+  for (let i = 0; i < 3; i++) { const a = M.time * 3 + i * 2.1; circle(c, x + Math.cos(a) * r * 1.5, y + Math.sin(a) * r * 0.7, Math.max(1, r * 0.15), '#ffe066'); }
+}
+function drawHoldMeter(c, x, y, s, t, a, b, col, label) {
+  const max = MECH.charge.meterMax, w = 64 * s, h = 7 * s, x0 = x - w / 2;
+  const fx = v => x0 + w * clamp(v / max, 0, 1);
+  c.fillStyle = 'rgba(0,0,0,0.6)'; rrect(c, x0 - 2, y - 2, w + 4, h + 4, 3); c.fill();
+  c.fillStyle = 'rgba(81,207,102,0.85)'; c.fillRect(fx(a), y, fx(b) - fx(a), h);           // sweet spot
+  const inWin = t >= a && t <= b;
+  c.fillStyle = col; c.fillRect(x0, y + h * 0.3, fx(t) - x0, h * 0.4);
+  c.fillStyle = '#fff'; c.fillRect(fx(t) - 1.5, y - 3, 3, h + 6);                         // needle
+  text(c, inWin ? 'NOW!' : label, x, y + h + 9 * s, 10 * s + 3, inWin ? '#7CFC00' : '#fff', 'center', '#000', 3);
+}
 function drawChargeRing(c, p) {
   const x = PX(p.x, p.y), y = PY(p.y), rx = p.r * KZ(p.y) * 1.9, ry = rx * GT(p.y);
   c.lineWidth = 5 * CZ;
@@ -618,6 +654,17 @@ function drawHUD(c) {
     if (bt.sub) text(c, bt.sub, 0, size * 0.72, Math.min(30 * u, VW / (bt.sub.length * 0.55)), '#fff', 'center', '#000', 5 * u);
     c.restore();
   }
+  if (M.notice) { // 4. off-ball foul notice
+    const n = M.notice, a = Math.min(1, n.t * 6, (n.life - n.t) * 3), nw = Math.min(VW - 30, 560 * u), nx = VW / 2 - nw / 2, ny = 118 * u;
+    c.globalAlpha = clamp(a, 0, 1);
+    c.fillStyle = 'rgba(40,6,6,0.92)'; rrect(c, nx, ny, nw, 74 * u, 12 * u); c.fill();
+    c.strokeStyle = '#ff4d4d'; c.lineWidth = 3; c.stroke();
+    text(c, '🟥 ' + n.title, VW / 2, ny + 17 * u, 22 * u, '#ff6b6b', 'center', '#000', 4);
+    text(c, n.text, VW / 2, ny + 40 * u, Math.min(14 * u, nw / (n.text.length * 0.5)), '#fff', 'center', null, 0, FONT_UI);
+    text(c, n.sub, VW / 2, ny + 60 * u, Math.min(13 * u, nw / (n.sub.length * 0.55)), '#ffe066', 'center', '#000', 2);
+    c.globalAlpha = 1;
+  }
+  if (M.phase === 'hyper' && M.hyper) drawHyperOverlay(c, u);
   if (M.phase === 'intro') {
     const t = M.phaseT;
     const str = t < 1.05 ? 'READY?' : 'KICK OFF!';
@@ -630,6 +677,37 @@ function drawHUD(c) {
   if (Touch.active && !M.demo) drawTouchControls(c);
 }
 
+function btnGlyph(devId, btn) {
+  const d = Input.devices[devId];
+  if (!d) return btn.toUpperCase();
+  if (d.kind === 'pad') return PAD_FAMILIES[d.family].g[btn];
+  if (d.kind === 'kb') return KB_LAYOUTS[devId].help[btn].split(' / ')[0];
+  return TOUCH_HELP[btn];
+}
+function drawHyperOverlay(c, u) { // 5. hyper strike charge + quick-time event
+  const h = M.hyper, H = MECH.hyper, p = h.p, cx = VW / 2, cy = VH * 0.62;
+  if (h.stage === 'cutscene') return;
+  c.fillStyle = 'rgba(20,0,40,0.45)'; c.fillRect(0, 0, VW, VH);
+  text(c, '🔮 HYPER STRIKE 🔮', cx, VH * 0.3, 44 * u, '#d0a6ff', 'center', '#000', 7 * u);
+  const who = p.human ? p.humanH.label : 'CPU';
+  if (h.stage === 'charge') {
+    text(c, p.human ? `${who}: HOLD ${btnGlyph(p.human, 'ability')} TO CHARGE` : `${p.name.toUpperCase()} IS CHARGING...`, cx, cy - 40 * u, 26 * u, '#fff', 'center', '#000', 5);
+    const w = 360 * u; c.fillStyle = 'rgba(0,0,0,0.6)'; rrect(c, cx - w / 2, cy, w, 22 * u, 8 * u); c.fill();
+    c.fillStyle = '#b26bff'; rrect(c, cx - w / 2, cy, w * clamp(h.charge / H.chargeTime, 0, 1), 22 * u, 8 * u); c.fill();
+    return;
+  }
+  const want = h.steps[h.idx];
+  text(c, p.human ? `${who}: PRESS` : 'CPU QUICK-TIME EVENT', cx, cy - 70 * u, 22 * u, '#fff', 'center', '#000', 4);
+  const g = p.human ? btnGlyph(p.human, want) : want.toUpperCase();
+  const pulse = 1 + 0.08 * Math.sin(M.time * 20);
+  circle(c, cx, cy, 46 * u * pulse, '#ffd43b', '#000', 4);
+  text(c, g, cx, cy + 2, Math.min(40 * u, 80 * u / Math.max(1, g.length * 0.6)), '#000', 'center', null);
+  text(c, want.toUpperCase(), cx, cy + 66 * u, 16 * u, '#ffe066', 'center', '#000', 3);
+  const w = 260 * u, frac = clamp(1 - h.stepT / H.qteStepTime, 0, 1);
+  c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(cx - w / 2, cy + 84 * u, w, 8 * u);
+  c.fillStyle = frac > 0.35 ? '#51cf66' : '#ff6b6b'; c.fillRect(cx - w / 2, cy + 84 * u, w * frac, 8 * u);
+  for (let i = 0; i < h.steps.length; i++) circle(c, cx + (i - (h.steps.length - 1) / 2) * 26 * u, cy + 110 * u, 7 * u, i < h.idx ? '#7CFC00' : i === h.idx ? '#ffd43b' : '#555');
+}
 function drawTouchControls(c) {
   const L = Touch.layout(VW, VH);
   c.save(); c.globalAlpha = 0.5;
