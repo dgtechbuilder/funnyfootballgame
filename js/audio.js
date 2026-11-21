@@ -83,7 +83,65 @@ const SFX = {
   thud() { this.tone(90, 0.18, 'sine', 0.5, 40); this.noise(0.12, 0.3, 'lowpass', 600); },
   tackle() { this.noise(0.22, 0.35, 'bandpass', 2500, 500, 0, 0.8); this.tone(300, 0.1, 'triangle', 0.15, 120); },
   bonk() { this.tone(600, 0.12, 'square', 0.12, 150); this.tone(900, 0.1, 'sine', 0.15, 300, 0.03); },
-  post() { [523, 1046, 1568].forEach((f, i) => this.tone(f, 0.6, 'triangle', 0.15 / (i + 1), f * 0.98)); },
+  post() { // metal goal frame: inharmonic partials ring out
+    [1, 2.76, 5.4, 8.93].forEach((m, i) => this.tone(420 * m, 0.9 - i * 0.15, i ? 'sine' : 'triangle', 0.2 / (i + 1), 420 * m * 0.995));
+    this.noise(0.04, 0.4, 'highpass', 3000); this.tone(140, 0.15, 'sine', 0.3, 70);
+  },
+  // body impact: a heavy thump, a cloth/skin slap and a little crunch
+  hit(power = 1) {
+    this.tone(75 + power * 15, 0.22, 'sine', 0.45 + power * 0.2, 35);
+    this.noise(0.1, 0.32 + power * 0.15, 'lowpass', 900, 300);
+    this.noise(0.035, 0.22, 'bandpass', 3200, 1800, 0.01, 1.4);
+  },
+  // falling onto the grass
+  bodyFall() {
+    this.tone(62, 0.16, 'sine', 0.4, 30);
+    this.noise(0.18, 0.28, 'lowpass', 450, 150);
+    this.noise(0.14, 0.07, 'highpass', 2500, null, 0.03);
+  },
+  // shot whoosh past the camera
+  whoosh(speed = 1) {
+    this.noise(0.28, 0.12 + speed * 0.12, 'bandpass', 700, 3200, 0, 1.8);
+    this.noise(0.22, 0.06 + speed * 0.06, 'bandpass', 3000, 900, 0.12, 1.5);
+  },
+  // ball bulging the net: big swish, rope thump and the frame's chain rattle
+  netHit(power = 1) {
+    this.noise(0.55, 0.3 + power * 0.15, 'highpass', 3500, 900, 0, 0.7);
+    this.noise(0.7, 0.22, 'bandpass', 1600, 500, 0.03, 0.8);
+    this.tone(105, 0.3, 'sine', 0.5, 50, 0.01);
+    this.noise(0.12, 0.35, 'lowpass', 500, 120, 0.01);
+    for (let i = 0; i < 7; i++) this.tone(2200 + Math.random() * 2400, 0.025, 'square', 0.025, null, 0.05 + i * 0.035 + Math.random() * 0.02);
+  },
+  // keeper catch: leather-on-glove smack and a chest thump
+  catchBall(power = 0.5) {
+    this.noise(0.05, 0.45 + power * 0.25, 'bandpass', 1300, 700, 0, 1.3);
+    this.tone(170, 0.12, 'sine', 0.4 + power * 0.2, 75);
+    this.noise(0.12, 0.2, 'lowpass', 400, 120, 0.04);
+    this.tone(1150, 0.035, 'sine', 0.05, 1500, 0.02);
+  },
+  // keeper punch / parry
+  parry() {
+    this.noise(0.05, 0.8, 'bandpass', 1800, 700, 0, 1);
+    this.tone(240, 0.12, 'sine', 0.6, 110);
+  },
+  // crowd 'OOOOH' (near miss, post, great save)
+  crowdOoh(big = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const f1 = this.ctx.createBiquadFilter(), f2 = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
+    f1.type = f2.type = 'bandpass'; f1.Q.value = 5; f2.Q.value = 7;
+    f1.frequency.setValueAtTime(560, t); f1.frequency.linearRampToValueAtTime(360, t + 1.2);
+    f2.frequency.setValueAtTime(900, t); f2.frequency.linearRampToValueAtTime(800, t + 1.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22 * big, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    f1.connect(g); f2.connect(g); g.connect(this.sfx);
+    for (let i = 0; i < 10; i++) {
+      const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+      const f = (i % 2 ? 210 : 120) * (1 + (Math.random() - 0.5) * 0.12);
+      o.frequency.setValueAtTime(f * 1.1, t); o.frequency.linearRampToValueAtTime(f * 0.85, t + 1.4);
+      o.connect(f1); o.connect(f2); const st = t + Math.random() * 0.12; o.start(st); o.stop(t + 1.6);
+    }
+    this.setCrowd(0.22);
+  },
   whistle(long = false) {
     const t = long ? 0.9 : 0.35;
     if (!this.ctx) return;
@@ -174,55 +232,112 @@ const SFX = {
   // ---- tiny step-sequencer for background music ----
   _schedule() {
     if (!this.ctx) return;
-    const bpm = this.musicMode === 'match' ? 112 : 104;
+    const bpm = this.musicMode === 'match' ? 113 : 108; // amapiano sits around 108-115 BPM
     const stepDur = 60 / bpm / 4;
     while (this._nextTime < this.ctx.currentTime + 0.15) {
       this._playStep(this._step, this._nextTime, stepDur);
-      this._nextTime += stepDur; this._step = (this._step + 1) % 64;
+      this._nextTime += stepDur; this._step = (this._step + 1) % 128; // 8-bar loop
     }
   },
+  // ---- AMAPIANO GROOVE ----------------------------------------------------
+  // Log-drum bassline (the pitch-dropping, resonant "knock"), soft four-on-the-floor
+  // kick, swung shakers, off-beat open hats, claps on 2 and 4, woodblock rimshots,
+  // jazzy Rhodes chord stabs over an F-minor progression, a warm pad, and a breathy
+  // flute lead in match mode.
   _playStep(s, t, sd) {
-    // Afrobeats / amapiano-flavoured groove: syncopated kick, shaker, bell, log-drum bass
     if (!this.musicOn) return;
-    const ctx = this.ctx, dest = this.music;
-    const match = this.musicMode === 'match';
-    const bar = Math.floor(s / 16) % 4, st = s % 16;
-    const roots = [0, -3, -5, -7]; // i - VI - v - IV-ish in A minor-ish
-    const root = 110 * Math.pow(2, roots[bar] / 12);
-    const osc = (freq, dur, type, vol, at = t, slide = null) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = type; o.frequency.setValueAtTime(freq, at);
-      if (slide) o.frequency.exponentialRampToValueAtTime(slide, at + dur);
-      g.gain.setValueAtTime(vol, at); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-      o.connect(g); g.connect(dest); o.start(at); o.stop(at + dur + 0.02);
-    };
-    const noiseHit = (vol, hp, dur) => {
+    const ctx = this.ctx, dest = this.music, match = this.musicMode === 'match';
+    const bar = Math.floor(s / 16) % 8, st = s % 16;
+    const swing = st % 2 ? sd * 0.18 : 0;            // amapiano shuffle on the off-16ths
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+    // F minor progression with rootless jazz voicings: Fm9 | Bbm9 | Ebmaj9 | Dbmaj9
+    const PROG = [
+      { root: 41, chord: [56, 60, 63, 67] },  // Fm9   (Ab C Eb G)
+      { root: 46, chord: [56, 60, 61, 65] },  // Bbm9  (Ab C Db F)
+      { root: 39, chord: [55, 58, 62, 65] },  // Ebmaj9 (G Bb D F)
+      { root: 37, chord: [53, 56, 60, 63] },  // Dbmaj9 (F Ab C Eb)
+    ];
+    const P = PROG[bar % 4];
+    const env = (g, at, peak, a, dur) => { g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + a); g.gain.exponentialRampToValueAtTime(0.0001, at + dur); };
+    const noise = (at, vol, type, freq, dur, q = 0.7) => {
       const n = ctx.createBufferSource(); n.buffer = this.noiseBuf;
-      const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
-      const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      n.connect(f); f.connect(g); g.connect(dest); n.start(t, Math.random()); n.stop(t + dur + 0.01);
+      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = ctx.createGain(); env(g, at, vol, 0.002, dur);
+      n.connect(f); f.connect(g); g.connect(dest); n.start(at, Math.random()); n.stop(at + dur + 0.02);
     };
-    // kick: afrobeats "3-3-2" feel
-    if ([0, 3, 6, 8, 11, 14].includes(st) && (st !== 14 || bar % 2)) {
+    const tone = (freq, at, dur, type, vol, a = 0.005, to = null) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
-      g.gain.setValueAtTime(st % 8 === 0 ? 0.9 : 0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
-      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.17);
+      o.type = type; o.frequency.setValueAtTime(freq, at); if (to) o.frequency.exponentialRampToValueAtTime(to, at + Math.min(dur, 0.08));
+      env(g, at, vol, a, dur); o.connect(g); g.connect(dest); o.start(at); o.stop(at + dur + 0.02);
+      return o;
+    };
+
+    // kick: soft and round, every beat
+    if (st % 4 === 0) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.1);
+      env(g, t, st === 0 ? 0.7 : 0.5, 0.003, 0.22); o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.24);
     }
-    // rimshot / clap on 4 and 12
-    if (st === 4 || st === 12) noiseHit(0.3, 1800, 0.1);
-    // shaker 16ths with accent
-    noiseHit(st % 4 === 2 ? 0.13 : 0.06, 6500, 0.035);
-    // agogo bell (standard West African bell pattern approximated in 16ths)
-    const bell = [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0];
-    if (bell[st]) osc(st === 0 ? 1320 : 990, 0.07, 'triangle', 0.07);
-    // log-drum bass (amapiano): pitch-sliding sine plucks
-    const logPat = match ? [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0] : [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0];
-    if (logPat[st]) osc(root * (st === 10 ? 1.5 : 1), sd * 2.6, 'sine', 0.42, t, root * 0.75);
-    // highlife-style guitar riff (pentatonic)
-    const scale = [0, 3, 5, 7, 10, 12, 15];
-    const riff = match ? [4, -1, 3, 2, -1, 3, -1, 1, 4, -1, 3, -1, 5, -1, 3, 2] : [2, -1, -1, 3, -1, -1, 4, -1, 3, -1, -1, 2, -1, 1, -1, -1];
-    const m = riff[st];
-    if (m >= 0) osc(root * 4 * Math.pow(2, scale[m] / 12), sd * 1.2, 'triangle', 0.09);
+    // clap on 2 and 4 (three quick layered bursts)
+    if (st === 4 || st === 12) for (const d of [0, 0.011, 0.023]) noise(t + d, 0.22, 'bandpass', 1400, 0.09, 1.2);
+    // shaker: every 16th, swung, accented on the off-beats
+    noise(t + swing, st % 4 === 2 ? 0.1 : 0.045, 'highpass', 7500, 0.04);
+    // open hat on the off-beats
+    if (st % 4 === 2) noise(t, 0.06, 'highpass', 9000, 0.14);
+    // woodblock rimshots: syncopated, a different pattern every other bar
+    const rims = bar % 2 ? [3, 7, 10, 13] : [3, 6, 11, 15];
+    if (rims.includes(st)) tone(1750, t + swing, 0.05, 'sine', 0.07, 0.001, 1250);
+    // conga-ish tom at the end of every second bar
+    if (bar % 2 && (st === 14 || st === 15)) tone(st === 14 ? 240 : 190, t + swing, 0.16, 'sine', 0.12, 0.002, 160);
+
+    // LOG DRUM: pitch drops into the note through a resonant low-pass, the amapiano signature
+    const LOG = match
+      ? [[[0, 0], [3, 0], [6, 7], [10, 12], [13, 10]], [[0, 0], [2, 12], [5, 0], [8, 7], [11, 10], [14, 12]]]
+      : [[[0, 0], [3, 0], [10, 7]], [[0, 0], [6, 12], [11, 7]]];
+    const hit = LOG[bar % 2].find(n => n[0] === st);
+    if (hit) {
+      const at = t + swing, f = mtof(P.root + hit[1]), dur = 0.42;
+      const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain(), g2 = ctx.createGain();
+      o.type = 'sine'; o2.type = 'triangle';
+      o.frequency.setValueAtTime(f * 2.4, at); o.frequency.exponentialRampToValueAtTime(f, at + 0.045);
+      o2.frequency.setValueAtTime(f * 4.8, at); o2.frequency.exponentialRampToValueAtTime(f * 2, at + 0.045);
+      if (st >= 13 && bar % 4 === 3) o.frequency.exponentialRampToValueAtTime(f * 1.5, at + dur); // slide up into the turnaround
+      lp.type = 'lowpass'; lp.Q.value = 7; lp.frequency.setValueAtTime(2200, at); lp.frequency.exponentialRampToValueAtTime(260, at + dur);
+      g2.gain.value = 0.45;
+      env(g, at, 0.6, 0.004, dur);
+      o.connect(g); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(dest);
+      o.start(at); o2.start(at); o.stop(at + dur + 0.03); o2.stop(at + dur + 0.03);
+    }
+
+    // Rhodes-style chord stabs: syncopated, softer in the menus
+    const STABS = match ? [0, 3, 7, 10, 13] : [0, 7, 10];
+    if (STABS.includes(st)) {
+      const at = t + swing, dur = st === 0 ? sd * 5 : sd * 2.6, vol = match ? 0.034 : 0.026;
+      for (const m of P.chord) {
+        tone(mtof(m), at, dur, 'sine', vol, 0.008);
+        tone(mtof(m) * 2, at, dur * 0.6, 'triangle', vol * 0.22, 0.004); // bell-like overtone
+      }
+    }
+    // warm pad: the whole chord held under each bar
+    if (st === 0) {
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.connect(dest);
+      for (const m of P.chord) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sawtooth'; o.frequency.value = mtof(m - 12); o.detune.value = (Math.random() - 0.5) * 12;
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.011, t + sd * 4); g.gain.linearRampToValueAtTime(0.0001, t + sd * 16);
+        o.connect(g); g.connect(lp); o.start(t); o.stop(t + sd * 16 + 0.05);
+      }
+    }
+    // breathy flute lead in the second half of the loop (matches only)
+    if (match && bar >= 4) {
+      const MEL = { 0: 72, 3: 75, 6: 77, 8: 75, 10: 79, 13: 77 };
+      const m = MEL[st];
+      if (m !== undefined && !(bar === 7 && st > 8)) {
+        const at = t + swing, o = tone(mtof(m + (bar % 2 ? -2 : 0)), at, sd * 2.2, 'sine', 0.045, 0.03);
+        const lfo = ctx.createOscillator(), lg = ctx.createGain();
+        lfo.frequency.value = 5.5; lg.gain.value = 6; lfo.connect(lg); lg.connect(o.frequency); lfo.start(at); lfo.stop(at + sd * 2.3);
+        noise(at, 0.012, 'bandpass', 2500, sd * 1.5, 2);
+      }
+    }
   },
 };

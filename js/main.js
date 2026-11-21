@@ -18,7 +18,7 @@ const App = {
   cv: null, c: null, W: 1280, H: 720, dpr: 1, t: 0,
   screen: 'title', paused: false, pauseSel: 0, sel: 0, optSel: 0, resSel: 0,
   sides: { kb1: -1, kb2: 0, pad0: 0, pad1: 0, pad2: 0, pad3: 0, touch: -1 },
-  opts: { voice: false, rumble: true },
+  opts: { voice: false, rumble: true, pvoice: 'synth' },
   cfg: Object.assign({}, DEFAULT_CFG),
   hits: [], toasts: [], remap: null, padHold: {}, padsReturn: 'title', helpReturn: 'title',
 
@@ -41,6 +41,7 @@ const App = {
     if (!STADIUMS.some(s => s.id === this.cfg.stadium)) this.cfg.stadium = DEFAULT_CFG.stadium;
     for (const k of ['gearL', 'gearR']) if (!GEAR[this.cfg[k]]) this.cfg[k] = 'none';
     Input.rumbleOn = this.opts.rumble !== false;
+    VOX.mode = this.opts.pvoice || 'synth';
     Input.onConnect = (d, on) => {
       this.toast(`${on ? PAD_FAMILIES[d.family].icon : '❌'} ${d.name} ${on ? 'connected' : 'disconnected'} (P${Input.order.indexOf(d.id) + 1})`, on ? '#7CFC00' : '#ff8787');
       if (on) { SFX.uiConfirm(); Input.rumble(d.id, 200, 0.4, 0.6); }
@@ -197,7 +198,8 @@ const App = {
       { label: 'Power-Ups', vals: [true, false], key: 'items', fmt: v => v ? 'CHAOS ON' : 'OFF' },
       { label: 'Stadium Hazards', vals: [true, false], key: 'hazards', fmt: v => v ? 'ON' : 'OFF' },
       { label: 'Golden Goal On Draw', vals: [true, false], key: 'golden', fmt: v => v ? 'ON' : 'OFF' },
-      { label: 'Commentator Voice', vals: [false, true], key: 'voice', opt: true, fmt: v => v ? 'ON (TTS)' : 'OFF' },
+      { label: 'Commentator Voice', vals: [false, true], key: 'voice', opt: true, fmt: v => v ? 'ON (TTS)' : 'OFF', hint: v => v && VOX.ttsName() ? VOX.ttsName() : '' },
+      { label: 'Player Voices', vals: ['synth', 'accent', 'off'], key: 'pvoice', opt: true, fmt: v => ({ synth: 'ON', accent: 'ACCENT (TTS)', off: 'OFF' })[v], hint: v => v === 'accent' ? (VOX.ttsName() || 'no African TTS voice here: synth') : '' },
       { label: 'Controller Rumble', vals: [true, false], key: 'rumble', opt: true, fmt: v => v ? 'ON' : 'OFF' },
       ...(MECH.gear.enabled ? [
         { label: 'Left Team Gear', vals: GEAR_KEYS, key: 'gearL', fmt: v => GEAR[v].name.toUpperCase(), hint: v => gearLabel(v) },
@@ -210,6 +212,7 @@ const App = {
     const obj = r.opt ? this.opts : this.cfg;
     const i = r.vals.indexOf(obj[r.key]);
     obj[r.key] = r.vals[(i + dir + r.vals.length) % r.vals.length]; SFX.ui();
+    if (r.key === 'pvoice') { VOX.mode = obj.pvoice; SFX.init(); if (obj.pvoice !== 'off') VOX.say({ name: 'Sipho', team: { side: 0 }, role: 'captain' }, obj.pvoice === 'accent' ? 'Eish! Sharp sharp!' : 'AYEEE!', 'goal', 0, true); }
     if (r.key === 'rumble') { Input.rumbleOn = obj.rumble; if (obj.rumble) Input.rumbleAll(200, 0.5, 0.5); }
   },
   uOptions() {
