@@ -68,7 +68,7 @@ const MECH = {
     qteStepTime: 1.1,       // seconds per prompt
     points: 1,              // goals awarded on success
     cutsceneTime: 1.2,
-    aiSuccess: { easy: 0.4, normal: 0.6, hard: 0.8 }, // CPU chance to pass the whole quick-time event
+    aiSuccess: { rookie: 0.15, easy: 0.35, normal: 0.6, hard: 0.8, insane: 0.9 }, // CPU chance to pass the whole quick-time event
   },
 
   // 6. GEAR STAT TRADE-OFFS (applied to every outfield player of a team)
