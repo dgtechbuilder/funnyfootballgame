@@ -118,7 +118,7 @@ With your **captain** near the opponent's goal, hold Shoot to full charge. A rin
 
 ### Tackles, jukes and dodges
 
-- **Tackle:** slide into a player to knock them down. A tackled player **stays down for 2.5 s**.
+- **Tackle:** slide into a player to knock them down. A tackled player **stays down for 1.5 s**.
 - **Perfect tackle:** hold Tackle and release in the green part of the meter. It slides further and hits harder. A quick tap gives a normal tackle.
 - **Off-ball foul:** tackling someone who is more than **5 m from the ball**, and isn't the player a pass is heading to, gives the victim's team a **free item**. If their item slots are already full, it's used straight away. A red **OFF-BALL FOUL!** banner shows who did it and what was given.
 - **Juke:** press Tackle while you have the ball to spin away from defenders.
@@ -153,10 +153,11 @@ A glowing 🔮 **hyper orb** drops onto the pitch every 35 s. Run over it to gra
 3. **Hold POWER** to charge it up.
 4. Press the **3 button prompts** in time.
 
-Success plays a cutscene and an arcing power kick into the net worth **2 goals**. Failure loses the orb and gives the ball to the other team. While you hold both the orb and the ball, POWER triggers the hyper strike instead of your normal power.
+Success plays a cutscene and an arcing power kick into the net worth **1 goal**. Failure loses the orb and gives the ball to the other team. While you hold both the orb and the ball, POWER triggers the hyper strike instead of your normal power.
 
 ### Goalkeepers
 
+- **Distribution:** after a catch, the keeper doesn't just hoof it. A teammate makes a run to an open spot in midfield, marked **GET OPEN!** on the pitch for human teams. If you're playing, control switches to that teammate. The keeper passes to their feet as soon as they're open, or after about 2 seconds at the latest.
 - When the ball is far away, keepers get distracted by 📱 phone calls, 🍢 suya, 🤳 selfies and 💤 naps, so they react late when it comes back.
 - Now and then they grow **STRETCHY ARMS** to reach a shot they otherwise couldn't.
 
@@ -177,6 +178,37 @@ The team that concedes a goal gets an item to help it catch up.
 
 The CPU uses everything above: powers, items, dodges, super strikes and hyper strikes.
 
+### Pitch chaos: animals, obstacles and helpers
+
+With **Stadium Hazards** on, the pitch gets busier as the match goes on.
+
+**Walking animals.** These are blocky Roblox-style animals with proper walk cycles. They're solid, so players bump into them and the ball bounces off. Each one does something to the game:
+
+| Animal | Where | What it does |
+|---|---|---|
+| 🐘 Elephant | Maasai Mara | Sprays water from its trunk. Players in front slip, and the ball gets blasted away. |
+| 🦒 Giraffe | Maasai Mara | Heads any ball that comes within reach, including high lobs. |
+| 🦓 Zebra | Maasai Mara | Chases loose balls and hoofs them anywhere. It barges ball carriers too. |
+| 🐪 Camel | Sahara | Sits down in the way, and spits at the nearest player, who spins out. |
+| 🐐 Goat | Every stadium | Charges and headbutts the nearest player. |
+| 🐧 Penguins | Kilimanjaro | Belly-slide across the pitch in a group, scattering players. |
+
+A hard shot that hits an animal can knock a **? crate** loose. Juma's Stampede power uses the same blocky zebras and wildebeest.
+
+**Random events.** One pops up every 11–17 seconds.
+
+| Event | Type | What happens |
+|---|---|---|
+| 🍢 Snack vendor | Helper | The first player to reach her gets a **free power-up**, or a speed boost if their item slots are already full. |
+| 🛩️ Supply drop | Helper | A plane drops three **? crates** across the pitch. |
+| ☀️ Sunshine zone | Helper | Stand in it for a speed boost. |
+| 🔴 Springboard | Helper | Launches the ball high, and bounces players with a speed boost. |
+| 🏃 Pitch invader | Obstacle | A fan runs on, **steals the ball** and runs off with it. Tackle him to win it back and earn a **free power-up**. |
+| 🌪️ Dust devil | Obstacle | Spins players around, and swirls the ball up before flinging it out. |
+| 🌧️ Mud puddle | Obstacle | A rain cloud leaves mud that slows players down and stops the ball. |
+
+These all sit on top of each stadium's own hazards: lightning, power cuts, meteors and UFOs.
+
 ---
 
 ## Stadiums
@@ -185,9 +217,9 @@ The CPU uses everything above: powers, items, dodges, super strikes and hyper st
 |---|---|---|
 | Lagos Power Arena | Electric fence (players tackled into it are shown as skeletons) | Lightning, and NEPA power cuts that black out the pitch |
 | Nyiragongo Bowl | Lava rock | Meteor showers |
-| Kilimanjaro Summit | Snowbanks, on an ice pitch | Penguins from Cape Town who took a wrong turn |
-| Maasai Mara Savannah | Thorn bushes that bounce you back | Elephants, giraffes and zebras |
-| Sahara Oasis | Sand dunes, on a slow sandy pitch | Camel caravans |
+| Kilimanjaro Summit | Snowbanks, on an ice pitch | Penguin belly-slides (Cape Town penguins who took a wrong turn) |
+| Maasai Mara Savannah | Thorn bushes that bounce you back | Elephants, giraffes and zebras walking the pitch |
+| Sahara Oasis | Sand dunes, on a slow sandy pitch | Camels and goats |
 | Afronaut Launchpad | Force field, with low gravity | Alien abductions |
 
 ## Match Rules
@@ -216,7 +248,7 @@ The CPU uses everything above: powers, items, dodges, super strikes and hyper st
 
 ## Tuning and testing the mechanics
 
-Six mechanics can each be switched off. All their numbers and on/off flags live in **`js/config.js`**:
+Eight systems can each be switched off. All their numbers and on/off flags live in **`js/config.js`**:
 
 - timed dodge
 - charged tackles and shots
@@ -224,6 +256,8 @@ Six mechanics can each be switched off. All their numbers and on/off flags live 
 - off-ball foul
 - hyper strike
 - gear
+- pitch chaos (animals and events)
+- keeper distribution
 
 To test one mechanic on its own without editing code, add it to the URL:
 
@@ -233,13 +267,14 @@ To test one mechanic on its own without editing code, add it to the URL:
 | `index.html?mech=dodge,hyper` | only dodge and hyper strike are on |
 | `index.html?mech=-hyper,-gear` | everything except hyper strike and gear is on |
 
-Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`.
+Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`, `chaos`, `keeperPass`.
 
-**Balance note:** with every mechanic on, matches are high-scoring, around 16–23 goals. The biggest levers in `js/config.js` are:
+**Balance note:** with everything on, a 3-minute match has around 15–19 goals. The main things to change in `js/config.js`:
 
-- `immobilize.duration`: how long a tackled player stays down (default 2.5 s).
-- `hyper.points`: goals per hyper strike (default 2).
+- `immobilize.duration`: how long a tackled player stays down (default 1.5 s).
+- `hyper.points`: goals per hyper strike (default 1).
 - `hyper.spawnEvery`: seconds between orbs (default 35).
+- `chaos.interval` and `chaos.weights`: how often each animal and event appears. Set a weight to 0 to remove that event.
 
 **Adding a character's own hyper strike:** add an entry to `HYPER_STRIKES` in `js/game.js` (the existing `powerKick` is the template), then set `hyper: '<key>'` on that captain in `js/data.js`. Captains without one use the power kick.
 
@@ -254,7 +289,9 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`.
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
 | `js/audio.js` | WebAudio sound effects, vuvuzelas and the Afrobeats / amapiano sequencer |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, rumble |
+| `js/creatures.js` | Blocky Roblox-style animals (elephant, giraffe, zebra, camel, goat, penguin, wildebeest) and pitch NPCs, built from the same 3D blocks as the players |
 | `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |
 | `js/game.js` | Match simulation: physics, AI, keepers, tackles, dodges, shots, super and hyper strikes, powers, items, hazards, gear |
+| `js/chaos.js` | Animal behaviours and the random obstacle and helper events, tied into power-ups |
 | `js/render.js` | Perspective camera, stadiums, crowd, pitch, entities, effects, meters and HUD |
 | `js/main.js` | Clickable menus, controller setup and remap wizard, pause, results, and the main loop |

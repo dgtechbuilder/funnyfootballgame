@@ -6,7 +6,7 @@
 //    index.html?mech=dodge            -> ONLY the dodge mechanic is on
 //    index.html?mech=dodge,hyper      -> only dodge + hyper strike
 //    index.html?mech=-hyper,-gear     -> everything EXCEPT hyper strike and gear
-//  Names: dodge, charge, immobilize, offBall, hyper, gear
+//  Names: dodge, charge, immobilize, offBall, hyper, gear, chaos, keeperPass
 //
 //  Distances are in game units. The pitch is 1800 units long; 45 units ~ 1 metre.
 // ============================================================================
@@ -42,7 +42,7 @@ const MECH = {
   // 3. TACKLE IMMOBILIZE
   immobilize: {
     enabled: true,
-    duration: 2.5,          // seconds a tackled player stays down
+    duration: 1.5,          // seconds a tackled player stays down
   },
 
   // 4. OFF-BALL TACKLE PENALTY
@@ -66,7 +66,7 @@ const MECH = {
     chargeTimeout: 3.0,     // fail if not fully charged by then
     qteSteps: 3,            // button prompts to complete
     qteStepTime: 1.1,       // seconds per prompt
-    points: 2,              // goals awarded on success
+    points: 1,              // goals awarded on success
     cutsceneTime: 1.2,
     aiSuccess: { easy: 0.4, normal: 0.6, hard: 0.8 }, // CPU chance to pass the whole quick-time event
   },
@@ -74,6 +74,41 @@ const MECH = {
   // 6. GEAR STAT TRADE-OFFS (applied to every outfield player of a team)
   gear: {
     enabled: true,
+  },
+
+  // 7. PITCH CHAOS: walking animals + random obstacles and helpers (needs "Stadium Hazards" ON in Match Rules)
+  chaos: {
+    enabled: true,
+    firstEvent: 9,                 // seconds into a match before the first chaos event
+    interval: [11, 17],            // seconds between chaos events (random in this range)
+    maxEvents: 2,                  // obstacle/helper events on the pitch at once
+    maxCreatures: 3,               // walking animals on the pitch at once (penguin slides don't count)
+    weights: { animal: 3, vendor: 2, invader: 1.5, dustdevil: 1.5, boostzone: 2, cratedrop: 1.5, puddle: 1.5, springboard: 1.5 },
+    creatureLife: [14, 20],        // seconds an animal stays before wandering off
+    shotDropChance: 0.35,          // a hard shot that hits an animal knocks a ? crate loose
+    elephant:  { speed: 55, r: 56, sprayEvery: [5, 7], sprayRange: 270 },   // trunk spray: rivals slip, ball blasted
+    giraffe:   { speed: 70, r: 30, reach: 95, headerSpeed: 780 },           // heads any ball (even lobs) within reach
+    zebra:     { speed: 140, chaseSpeed: 180, r: 28, chaseRange: 450, kickSpeed: 900 }, // chases and hoofs the ball
+    camel:     { speed: 45, r: 42, spitEvery: [4, 6], spitRange: 330 },     // sits down, spits at players
+    goat:      { speed: 115, r: 20, chargeSpeed: 420, chargeEvery: [3, 5], chargeRange: 380 }, // headbutts players
+    penguin:   { speed: 470, r: 18 },                                        // belly-slide stampede
+    vendor:    { speed: 75 },                                                // helper: touch her for a free item
+    invader:   { speed: 250, carryTime: 4 },                                 // obstacle: steals the ball; tackle him for an item
+    dustdevil: { r: 75, life: 7, speed: 120 },                               // obstacle: spins players, swirls the ball
+    boostzone: { r: 110, life: 8 },                                          // helper: speed boost while inside
+    puddle:    { r: 120, life: 10, slow: 0.6 },                              // obstacle: mud slows players and the ball
+    springboard: { life: 10, r: 38, launch: 520 },                           // helper: launches the ball and players
+    cratedrop: { count: 3 },                                                 // helper: a plane drops ? crates
+  },
+
+  // 8. KEEPER DISTRIBUTION: after a catch, pass to an open teammate around midfield
+  keeperPass: {
+    enabled: true,
+    bandStart: 0.33,   // midfield band, as a fraction of the pitch from the keeper's own goal
+    bandEnd: 0.68,
+    openRadius: 110,   // a receiver counts as open if no rival is this close
+    minHold: 0.5,      // keeper holds at least this long
+    maxHold: 2.2,      // ...and passes to the best option after this long even if nobody is open
   },
 };
 

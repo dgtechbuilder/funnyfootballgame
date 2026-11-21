@@ -123,6 +123,9 @@ const SFX = {
     o.connect(f); f.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 1.2);
   },
   animal(e) {
+    e = { elephant: '🐘', zebra: '🦓', wildebeest: '🦓', giraffe: '🦒', camel: '🐪' }[e] || e;
+    if (e === 'goat') { for (let i = 0; i < 3; i++) this.tone(520 + i * 10, 0.12, 'sawtooth', 0.09, 470, i * 0.11); return; }
+    if (e === 'penguin') { this.penguin(); return; }
     if (e === '🐘') { this.tone(420, 0.7, 'sawtooth', 0.18, 700); this.tone(430, 0.7, 'square', 0.08, 760, 0.02); }
     else if (e === '🦓') { for (let i = 0; i < 5; i++) this.tone(700 - i * 60, 0.08, 'sawtooth', 0.1, 500, i * 0.07); }
     else if (e === '🦒') this.tone(220, 0.25, 'sine', 0.15, 180);

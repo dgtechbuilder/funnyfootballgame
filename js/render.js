@@ -120,6 +120,14 @@ function renderMatch(c) {
     }
   }
 
+  // 7. pitch chaos: ground events and creature shadows
+  if (M.chaos) drawChaosGround(c);
+  // 8. keeper distribution: show human teams where to get open
+  for (const T of M.teams) if (T.kSpot && T.humans.length && M.ball.owner === T.keeper) {
+    const pulse = 1 + 0.12 * Math.sin(M.time * 8);
+    groundEllipse(c, T.kSpot.x, T.kSpot.y, 46 * pulse, 'rgba(165,255,214,0.18)', '#a5ffd6', 3);
+    text(c, 'GET OPEN!', PX(T.kSpot.x, T.kSpot.y), PY(T.kSpot.y, 30), 16 * KZ(T.kSpot.y), '#a5ffd6', 'center', '#000', 3);
+  }
   // 5. hyper zone: shown while someone holds the orb (green = clear, red = defenders inside)
   if (MECH.hyper.enabled) {
     const holder = M.all.find(p => p.hasOrb);
@@ -165,10 +173,15 @@ function renderMatch(c) {
   if (M.orb) D.push({ y: M.orb.y, f: () => drawOrb(c, PX(M.orb.x, M.orb.y, M.orb.z + 30), PY(M.orb.y, M.orb.z + 30 + Math.sin(M.time * 4) * 6), 20 * KZ(M.orb.y)) });
   for (const q of M.projectiles) D.push({ y: q.y, f: () => drawProjectile(c, q) });
   for (const h of M.hazards) {
-    if (h.type === 'animal') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x, h.y), PY(h.y, h.r * 1.0 + Math.abs(Math.sin(M.time * (h.phase === 'graze' ? 2 : 8))) * 4), h.r * 2.5 * KZ(h.y), !h.flip) });
-    if (h.type === 'stampede') D.push({ y: h.y, f: () => drawEmoji(c, h.emoji, PX(h.x, h.y), PY(h.y, 30 + Math.abs(Math.sin(h.t * 14)) * 10), 70 * KZ(h.y), h.vx > 0) });
-    if (h.type === 'penguin') D.push({ y: h.y, f: () => drawEmoji(c, '🐧', PX(h.x, h.y), PY(h.y, 18), 46 * KZ(h.y), false, h.vy > 0 ? Math.PI * 0.5 : -Math.PI * 0.5) });
+    if (h.type === 'stampede') D.push({ y: h.y, f: () => drawAnimal(c, stampedeKind(h), PX(h.x, h.y), PY(h.y, 0), 1.05 * KZ(h.y), h.vx > 0 ? 1 : -1, h.t * 1.6, 1.4) });
   }
+  if (M.chaos) {
+    for (const cr of M.chaos.creatures) D.push({ y: cr.y, f: () => drawAnimal(c, cr.kind, PX(cr.x, cr.y), PY(cr.y, 0), KZ(cr.y) * (cr.kind === 'goat' ? 1.0 : 1.05), cr.dir, cr.t, cr.gait, { spray: cr.state === 'spray' || (cr.kind === 'camel' && cr.kickT > 0), sit: cr.state === 'sit', charge: cr.state === 'charge', kick: cr.kickT > 0 ? 1 - cr.kickT / 0.45 : 0 }) });
+    for (const e of M.chaos.events) {
+      if (e.type === 'vendor') D.push({ y: e.y, f: () => drawNPC(c, 'vendor', PX(e.x, e.y), PY(e.y), KZ(e.y), e.dir > 0 ? 0 : Math.PI, e.t, e.leaving ? 1 : 0.6) });
+      if (e.type === 'invader') D.push({ y: e.y, f: () => drawNPC(c, 'invader', PX(e.x, e.y), PY(e.y), KZ(e.y), e.face || 0, e.t, e.downT > 0 ? 0 : 1, { down: e.downT > 0, armsUp: e.carry, expr: e.downT > 0 ? 'hurt' : 'happy' }) });
+      if (e.type === 'dustdevil') D.push({ y: e.y, f: () => drawDustDevil(c, e) });
+    }  }
   D.push({ y: GY1, f: () => { drawGoalFront(c, 0); drawGoalFront(c, 1); } });
   D.sort((a, q) => a.y - q.y);
   for (const d of D) d.f();
@@ -176,6 +189,7 @@ function renderMatch(c) {
   drawWallFront(c);
   drawParticles(c);
 
+  if (M.chaos) drawChaosOverhead(c);
   // UFOs above everything
   for (const h of M.hazards) if (h.type === 'ufo') drawUfo(c, h);
   // falling meteors / storm clouds
@@ -415,6 +429,59 @@ function drawPlayerOverlay(c, p) {
   }
 }
 
+// ---- 7. pitch chaos visuals
+function drawChaosGround(c) {
+  const C = MECH.chaos;
+  for (const cr of M.chaos.creatures) groundEllipse(c, cr.x, cr.y, cr.r * (cr.kind === 'giraffe' ? 1.6 : 1.1), 'rgba(0,0,0,0.28)');
+  for (const e of M.chaos.events) {
+    if (e.type === 'boostzone') {
+      const fade = Math.min(1, e.life);
+      c.save(); c.globalAlpha = fade;
+      groundEllipse(c, e.x, e.y, C.boostzone.r, 'rgba(255,212,59,0.22)', '#ffd43b', 3);
+      for (let i = 0; i < 8; i++) { const a = M.time * 1.5 + i * TAU / 8; const [x1, y1] = P3(e.x + Math.cos(a) * C.boostzone.r * 0.55, e.y + Math.sin(a) * C.boostzone.r * 0.55); const [x2, y2] = P3(e.x + Math.cos(a) * C.boostzone.r * 0.9, e.y + Math.sin(a) * C.boostzone.r * 0.9); c.strokeStyle = 'rgba(255,240,150,0.8)'; c.lineWidth = 3; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); }
+      text(c, '☀️ SPEED', PX(e.x, e.y), PY(e.y, 4), 14 * KZ(e.y), '#ffe066', 'center', '#000', 3);
+      c.restore();
+    }
+    if (e.type === 'puddle' && e.rainT <= 0) {
+      c.save(); c.globalAlpha = Math.min(1, e.life);
+      groundEllipse(c, e.x, e.y, C.puddle.r, 'rgba(92,64,30,0.75)');
+      groundEllipse(c, e.x - 20, e.y - 15, C.puddle.r * 0.55, 'rgba(140,105,60,0.55)');
+      groundEllipse(c, e.x + 30, e.y + 10, C.puddle.r * 0.2, 'rgba(200,220,255,0.35)');
+      c.restore();
+    }
+    if (e.type === 'springboard') {
+      const R = C.springboard.r, [x, y] = P3(e.x, e.y), k = KZ(e.y);
+      c.save(); c.globalAlpha = Math.min(1, e.life);
+      groundEllipse(c, e.x, e.y, R, '#2f2f3a', '#111', 2);
+      for (let i = 0; i < 3; i++) ellipse(c, x, y - (4 + i * 4) * k, R * k * 0.8, R * k * 0.8 * GT(e.y), null, '#c0c0c8', 2);
+      ellipse(c, x, y - 16 * k, R * k, R * k * GT(e.y), '#ff4d4d', '#111', 2);
+      ellipse(c, x, y - 16 * k, R * k * 0.55, R * k * 0.55 * GT(e.y), '#ffd43b');
+      c.restore();
+    }
+    if (e.type === 'dustdevil') groundEllipse(c, e.x, e.y, C.dustdevil.r * 0.8, 'rgba(120,95,60,0.25)');
+  }
+  for (const s of M.chaos.spits) groundEllipse(c, s.x, s.y, 6, 'rgba(0,0,0,0.2)');
+}
+function drawDustDevil(c, e) {
+  const R = MECH.chaos.dustdevil.r, k = KZ(e.y), x = PX(e.x, e.y), y = PY(e.y);
+  c.save(); c.globalAlpha = Math.min(1, e.life) * 0.75;
+  for (let i = 0; i < 9; i++) {
+    const h = i * 16, w = (R * 0.25 + i * R * 0.09) * k, wob = Math.sin(M.time * 8 + i) * 8 * k;
+    c.strokeStyle = i % 2 ? 'rgba(200,180,140,0.9)' : 'rgba(150,125,90,0.9)'; c.lineWidth = 3;
+    c.beginPath(); c.ellipse(x + wob, y - h * k, w, w * 0.32, 0, M.time * 6 + i, M.time * 6 + i + 4.5); c.stroke();
+  }
+  c.restore();
+}
+function drawChaosOverhead(c) {
+  for (const s of M.chaos.spits) circle(c, PX(s.x, s.y, s.z), PY(s.y, s.z), 5 * KZ(s.y), '#c0eb75', '#5c940d', 1.5);
+  for (const e of M.chaos.events) {
+    if (e.type === 'cratedrop') drawEmoji(c, '🛩️', PX(e.x, e.y, 520), PY(e.y, 520), 110 * KZ(e.y), e.dir > 0);
+    if (e.type === 'puddle' && e.rainT > 0) {
+      const x = PX(e.x, e.y, 280), y = PY(e.y, 280), k = KZ(e.y);
+      for (const [dx, dy, r] of [[-40, 0, 34], [0, -14, 42], [42, 0, 32], [15, 10, 30], [-15, 10, 30]]) circle(c, x + dx * k, y + dy * k, r * k, '#7d8a99');
+    }
+  }
+}
 function drawOrb(c, x, y, r) {
   const g = c.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
   g.addColorStop(0, '#fff7c2'); g.addColorStop(0.45, '#d08cff'); g.addColorStop(1, '#6a1bb5');
