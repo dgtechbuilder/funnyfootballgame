@@ -83,7 +83,65 @@ const SFX = {
   thud() { this.tone(90, 0.18, 'sine', 0.5, 40); this.noise(0.12, 0.3, 'lowpass', 600); },
   tackle() { this.noise(0.22, 0.35, 'bandpass', 2500, 500, 0, 0.8); this.tone(300, 0.1, 'triangle', 0.15, 120); },
   bonk() { this.tone(600, 0.12, 'square', 0.12, 150); this.tone(900, 0.1, 'sine', 0.15, 300, 0.03); },
-  post() { [523, 1046, 1568].forEach((f, i) => this.tone(f, 0.6, 'triangle', 0.15 / (i + 1), f * 0.98)); },
+  post() { // metal goal frame: inharmonic partials ring out
+    [1, 2.76, 5.4, 8.93].forEach((m, i) => this.tone(420 * m, 0.9 - i * 0.15, i ? 'sine' : 'triangle', 0.2 / (i + 1), 420 * m * 0.995));
+    this.noise(0.04, 0.4, 'highpass', 3000); this.tone(140, 0.15, 'sine', 0.3, 70);
+  },
+  // body impact: a heavy thump, a cloth/skin slap and a little crunch
+  hit(power = 1) {
+    this.tone(75 + power * 15, 0.22, 'sine', 0.45 + power * 0.2, 35);
+    this.noise(0.1, 0.32 + power * 0.15, 'lowpass', 900, 300);
+    this.noise(0.035, 0.22, 'bandpass', 3200, 1800, 0.01, 1.4);
+  },
+  // falling onto the grass
+  bodyFall() {
+    this.tone(62, 0.16, 'sine', 0.4, 30);
+    this.noise(0.18, 0.28, 'lowpass', 450, 150);
+    this.noise(0.14, 0.07, 'highpass', 2500, null, 0.03);
+  },
+  // shot whoosh past the camera
+  whoosh(speed = 1) {
+    this.noise(0.28, 0.12 + speed * 0.12, 'bandpass', 700, 3200, 0, 1.8);
+    this.noise(0.22, 0.06 + speed * 0.06, 'bandpass', 3000, 900, 0.12, 1.5);
+  },
+  // ball bulging the net: big swish, rope thump and the frame's chain rattle
+  netHit(power = 1) {
+    this.noise(0.55, 0.3 + power * 0.15, 'highpass', 3500, 900, 0, 0.7);
+    this.noise(0.7, 0.22, 'bandpass', 1600, 500, 0.03, 0.8);
+    this.tone(105, 0.3, 'sine', 0.5, 50, 0.01);
+    this.noise(0.12, 0.35, 'lowpass', 500, 120, 0.01);
+    for (let i = 0; i < 7; i++) this.tone(2200 + Math.random() * 2400, 0.025, 'square', 0.025, null, 0.05 + i * 0.035 + Math.random() * 0.02);
+  },
+  // keeper catch: leather-on-glove smack and a chest thump
+  catchBall(power = 0.5) {
+    this.noise(0.05, 0.45 + power * 0.25, 'bandpass', 1300, 700, 0, 1.3);
+    this.tone(170, 0.12, 'sine', 0.4 + power * 0.2, 75);
+    this.noise(0.12, 0.2, 'lowpass', 400, 120, 0.04);
+    this.tone(1150, 0.035, 'sine', 0.05, 1500, 0.02);
+  },
+  // keeper punch / parry
+  parry() {
+    this.noise(0.05, 0.8, 'bandpass', 1800, 700, 0, 1);
+    this.tone(240, 0.12, 'sine', 0.6, 110);
+  },
+  // crowd 'OOOOH' (near miss, post, great save)
+  crowdOoh(big = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const f1 = this.ctx.createBiquadFilter(), f2 = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
+    f1.type = f2.type = 'bandpass'; f1.Q.value = 5; f2.Q.value = 7;
+    f1.frequency.setValueAtTime(560, t); f1.frequency.linearRampToValueAtTime(360, t + 1.2);
+    f2.frequency.setValueAtTime(900, t); f2.frequency.linearRampToValueAtTime(800, t + 1.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22 * big, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    f1.connect(g); f2.connect(g); g.connect(this.sfx);
+    for (let i = 0; i < 10; i++) {
+      const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+      const f = (i % 2 ? 210 : 120) * (1 + (Math.random() - 0.5) * 0.12);
+      o.frequency.setValueAtTime(f * 1.1, t); o.frequency.linearRampToValueAtTime(f * 0.85, t + 1.4);
+      o.connect(f1); o.connect(f2); const st = t + Math.random() * 0.12; o.start(st); o.stop(t + 1.6);
+    }
+    this.setCrowd(0.22);
+  },
   whistle(long = false) {
     const t = long ? 0.9 : 0.35;
     if (!this.ctx) return;

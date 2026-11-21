@@ -7,7 +7,8 @@ Monate Cup is a chaotic, arcade-style football game for 1–6 players that runs 
 - **Teams:** 4 outfield players plus a goalkeeper, led by larger-than-life captains from across Africa.
 - **View:** a low, side-on broadcast camera.
 - **Characters:** chunky Roblox-style avatars built from shaded 3D blocks that turn to face where they run.
-- **No assets:** everything is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords) and the vuvuzelas.
+- **No assets:** everything is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords), the vuvuzelas and the players' voices.
+- **Players talk back:** they yelp "EISH!", "CHAI!" and "HAIBO!" when flattened, shout "E DON ENTER!" and ululate after goals, and sulk "WAHALA..." when they lose. Tackles thump, the net swishes and rattles, keeper gloves smack and the crowd goes "OOOH" at the woodwork.
 - **No build step:** just open the page.
 
 **Play online:** https://dgtechbuilder.github.io/funnyfootballgame/
@@ -231,7 +232,8 @@ These all sit on top of each stadium's own hazards: lightning, power cuts, meteo
 | Power-ups | On / off |
 | Stadium hazards | On / off |
 | Golden goal on a draw | On / off |
-| Commentator voice | Off / on (uses the browser's text-to-speech) |
+| Commentator voice | Off / on (uses the browser's text-to-speech, preferring a Nigerian, South African, Kenyan, Ghanaian or Tanzanian English voice when the device has one) |
+| Player voices | On (built-in synth voices with tonal, sing-song African intonation) / Accent (the device's African-English text-to-speech voices, e.g. in Edge on Windows; falls back to the synth) / Off |
 | Controller rumble | On / off |
 | Left / right team gear | No Gear, Heavy Boots, Feather Sandals, Shin Armour, Lucky Socks |
 
@@ -287,7 +289,8 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`, `chaos`, `ke
 | `index.html` | Page shell; loads the scripts in order |
 | `js/config.js` | Tunable numbers and on/off flags for the add-on mechanics, gear definitions, `?mech=` URL toggles |
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
-| `js/audio.js` | WebAudio sound effects, vuvuzelas and the amapiano music sequencer (log-drum bass, swung shakers, Rhodes chords, pad, flute lead) |
+| `js/audio.js` | WebAudio sound effects (body hits, net, glove catches, post clangs, crowd), vuvuzelas and the amapiano music sequencer (log-drum bass, swung shakers, Rhodes chords, pad, flute lead) |
+| `js/voice.js` | Player voices: a formant speech synth that sings the speech-bubble words with tonal melodies, rolled R's and ululation, plus optional African-English text-to-speech |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, rumble |
 | `js/creatures.js` | Blocky Roblox-style animals (elephant, giraffe, zebra, camel, goat, penguin, wildebeest) and pitch NPCs, built from the same 3D blocks as the players |
 | `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |

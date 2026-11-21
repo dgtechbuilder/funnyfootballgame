@@ -148,6 +148,7 @@ function say(lines, vars = {}, pri = 1) {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(txt.replace(/[^\w\s!?',.\-]/g, ''));
       u.rate = 1.15; u.pitch = 1.05; u.volume = 0.9;
+      const av = VOX.ttsVoice(false); if (av) { u.voice = av; u.lang = av.lang; }
       speechSynthesis.speak(u);
     } catch (e) { /* no voice available */ }
   }
@@ -234,6 +235,7 @@ function endMatch() {
   const win = a.score === b.score ? null : (a.score > b.score ? a : b);
   M.winner = win;
   for (const p of M.all) { p.celebrate = win ? p.team === win : false; p.charging = false; }
+  fullTimeVoices(win);
   M.bigText = { str: 'FULL TIME!', sub: win ? `${win.name} win!` : 'A draw! Everyone loses!', t: 0, life: 4.5, color: '#fff' };
   say(COMMENTARY.fulltime, {}, 3);
   M.ball.owner = null;
@@ -542,10 +544,11 @@ function shoot(p, charge, aimY = null, perfect = false, breaker = false) {
   if (breaker) { floatText(p.x, p.y, 100, 'PERFECT STRIKE!', '#ffd43b', 28); shake(9); SFX.superFire(); }
   p.charging = false; p.charge = 0; p.sweetT = -1; p.kickAnim = 0.25; p.stats.shots++;
   SFX.kick(charge); shake(2 + charge * 6);
+  if (charge > 0.55) SFX.whoosh(charge);
   if (p.human) Input.rumble(p.human, 60 + charge * 140, charge * 0.8, 0.3 + charge * 0.4);
   burst(b.x, b.y, 5, 6 + Math.floor(charge * 10), charge > 0.8 ? ['#ffd43b', '#ff922b', '#fff'] : '#ffffff', 250 + charge * 200, 'spark', 4, 0.4, 300);
   if (perfect) { floatText(p.x, p.y, 90, 'PERFECT!', '#7CFC00', 30); say(COMMENTARY.perfect, {}, 1); }
-  if (charge > 0.85) { excite(0.6); if (Math.random() < 0.5) bubble(p, pick(['HIYAAA!', 'TAKE THAT!', 'BOOM!', ...p.team.cap.quips])); }
+  if (charge > 0.85) { excite(0.6); if (Math.random() < 0.5) { const w = pick(['HIYAAA!', 'TAKE THAT!', 'GBAM!', ...p.team.cap.quips]); bubble(p, w); VOX.say(p, w, 'taunt'); } }
 }
 
 function pass(p, cmd) {
@@ -597,6 +600,19 @@ function pass(p, cmd) {
 }
 
 // ---------------------------------------------------------------------------
+//  Full-time voices: winners sing and ululate, losers sulk
+function fullTimeVoices(win) {
+  if (M.demo) return;
+  if (!win) { M.teams.forEach((T, i) => { const w = VOX.line(T.players[0], 'draw', 1.2 + i * 0.9, true); bubble(T.players[0], w, 2.5); }); return; }
+  const lose = other(win), ws = win.players;
+  const w = VOX.line(ws[0], 'win', 1.1, true); bubble(ws[0], w, 3);
+  VOX.ululate(ws[1] || ws[0], 1.6, 2.0);
+  if (ws[2]) { const w2 = VOX.line(ws[2], 'cheer', 2.2, true); bubble(ws[2], w2, 2.5); }
+  if (ws[3]) VOX.ululate(ws[3], 2.6, 1.6);
+  const l = VOX.line(lose.players[0], 'lose', 2.9, true); bubble(lose.players[0], l, 3);
+}
+
+// ---------------------------------------------------------------------------
 //  Player physics + status
 // ---------------------------------------------------------------------------
 function knock(p, vx, vy, dur, cause = 'hit', silent = false) {
@@ -610,9 +626,9 @@ function knock(p, vx, vy, dur, cause = 'hit', silent = false) {
   p.state = 'down'; p.stateT = dur; p.vx = vx; p.vy = vy; p.vz = Math.max(p.vz, 180 + Math.hypot(vx, vy) * 0.25);
   p.lyingDir = vx >= 0 ? 1 : -1; p.expr = 'hurt'; p.stats.knocked++;
   if (p.human) Input.rumble(p.human, 260, 0.9, 0.5);
-  if (!silent) bubble(p, pick(PAIN_WORDS));
+  if (!silent) { const w = pick(PAIN_WORDS); bubble(p, w); VOX.say(p, w, 'hurt'); } else VOX.grunt(p);
   burst(p.x, p.y, 40, 6, ['#ffe066', '#ffffff'], 180, 'star', 7, 0.7, 300);
-  SFX.bonk();
+  SFX.hit(clamp(Math.hypot(vx, vy) / 600, 0.3, 1.2)); SFX.bonk();
 }
 
 function wallEffect(p, nx, ny) {
@@ -658,7 +674,7 @@ function updatePlayer(p, dt) {
   if (p.fx.soot > 0 && Math.random() < dt * 4) part({ x: p.x, y: p.y, z: 60 * p.scale, vz: 50, life: 1.2, max: 1.2, size: 10, color: '#555', kind: 'smoke' });
 
   const g = GRAV * (M.stadium.grav < 1 ? 0.6 : 1);
-  if (p.z > 0 || p.vz > 0) { p.vz -= g * dt; p.z += p.vz * dt; if (p.z <= 0) { p.z = 0; if (p.vz < -300 && p.state === 'down') { p.vz = -p.vz * 0.3; SFX.thud(); burst(p.x, p.y, 0, 5, '#c8b89a', 100, 'smoke', 8, 0.4, 0); } else p.vz = 0; } }
+  if (p.z > 0 || p.vz > 0) { p.vz -= g * dt; p.z += p.vz * dt; if (p.z <= 0) { p.z = 0; if (p.vz < -300 && p.state === 'down') { p.vz = -p.vz * 0.3; SFX.bodyFall(); burst(p.x, p.y, 0, 5, '#c8b89a', 100, 'smoke', 8, 0.4, 0); } else p.vz = 0; } }
 
   switch (p.state) {
     case 'down': {
@@ -779,6 +795,7 @@ function contactInteractions(dt) {
       const downFor = MECH.immobilize.enabled ? MECH.immobilize.duration : 0.9 + 0.35 * p.tackleP * (v.fx.shrink > 0 ? 1.5 : 1); // 3. immobilize
       knock(v, p.vx * 0.75 * force, p.vy * 0.75 * force, downFor, 'tackle');
       p.stats.tackles++;
+      if (Math.random() < 0.3) { const w = pick(VOICE_LINES.taunt); VOX.say(p, w, 'taunt', 0.35); if (!p.bubble) bubble(p, w); }
       if (p.human) Input.rumble(p.human, 120, 0.6, 0.6);
       M.hitStop = 0.05; shake(7);
       excite(0.5);
@@ -912,7 +929,7 @@ function clampBallToField(b, owned) {
       if (vn < 0) {
         b.vx -= 1.75 * vn * nx; b.vy -= 1.75 * vn * ny;
         b.x = px + nx * (R + 7); b.y = py + ny * (R + 7);
-        if (-vn > 300) { SFX.post(); shake(5); floatText(px, py, 110, 'CLANG!', '#ffe066', 28); if (b.shot) say(COMMENTARY.post, {}, 2); excite(0.8); b.shot = null; }
+        if (-vn > 300) { SFX.post(); if (b.shot) SFX.crowdOoh(); shake(5); floatText(px, py, 110, 'CLANG!', '#ffe066', 28); if (b.shot) say(COMMENTARY.post, {}, 2); excite(0.8); b.shot = null; }
       }
     }
   }
@@ -922,7 +939,7 @@ function clampBallToField(b, owned) {
       if ((gx === 0 && b.vx < 0) || (gx === FW && b.vx > 0)) {
         b.vx = -b.vx * 0.55; b.vz = Math.abs(b.vz) * 0.6 + 80;
         b.x = gx + (gx === 0 ? R + 4 : -R - 4);
-        SFX.post(); floatText(gx, b.y, BAR_Z + 20, 'CROSSBAR!', '#ffe066', 26); shake(5);
+        SFX.post(); SFX.crowdOoh(); floatText(gx, b.y, BAR_Z + 20, 'CROSSBAR!', '#ffe066', 26); shake(5);
         if (b.shot) say(COMMENTARY.post, {}, 2); b.shot = null;
       }
     }
@@ -973,7 +990,7 @@ function scoreGoal(team) {
   if (!own) scorer.stats.goals++;
   M.lastScorer = scorer;
   Input.rumbleAll(500, 0.7, 1);
-  SFX.goalJingle(); SFX.cheer(1.5); SFX.whistle(); SFX.vuvuzela(2.5);
+  SFX.netHit(clamp(Math.hypot(b.vx, b.vy) / 1400, 0.4, 1.3)); SFX.goalJingle(); SFX.cheer(1.5); SFX.whistle(); SFX.vuvuzela(2.5);
   excite(1.5);
   const gx = team.dir > 0 ? FW : 0;
   for (let i = 0; i < 70; i++) part({ x: gx + rand(-60, 60), y: FH / 2 + rand(-160, 160), z: rand(40, 160), vx: rand(-300, 300), vy: rand(-300, 300), vz: rand(200, 700), g: 500, life: rand(1.5, 3), max: 3, size: rand(5, 9), color: pick(['#ff6b6b', '#ffd43b', '#4dabf7', '#51cf66', '#f783ac', '#ffffff', team.kit]), kind: 'confetti', rot: rand(0, TAU), vr: rand(-12, 12), drag: 1.5 });
@@ -982,7 +999,12 @@ function scoreGoal(team) {
   if (own) say(COMMENTARY.ownGoal, { p: scorer.name, t: team.name }, 3);
   else if (sup) say(COMMENTARY.superGoal, { p: scorer.name, s: sup.name }, 3);
   else say(COMMENTARY.goal, { p: scorer.name, t: team.name, o: conceded.name }, 3);
-  bubble(scorer, own ? 'OOPS...' : pick(scorer.role === 'captain' ? scorer.team.cap.quips : ['YESSSS!', 'GET IN!', 'WOOHOO!', 'I DID IT!']), 2.5);
+  const shout = own ? pick(VOICE_LINES.ownGoal) : pick(scorer.role === 'captain' ? [...scorer.team.cap.quips, ...VOICE_LINES.goal] : VOICE_LINES.goal);
+  bubble(scorer, shout, 2.5);
+  VOX.say(scorer, shout, own ? 'sad' : 'goal', 0.15, true);
+  const mates = team.players.filter(q => q !== scorer);
+  if (!own && mates.length) { const m1 = pick(mates); VOX.ululate(m1, 0.7, 1.6); const m2 = pick(mates.filter(q => q !== m1)); if (m2) { const w = VOX.line(m2, 'cheer', 1.1, true); if (w) bubble(m2, w, 2); } }
+  { const w = pick(VOICE_LINES.concede); VOX.say(conceded.keeper, w, 'sad', 1.4, true); bubble(conceded.keeper, w, 2.2); }
   const k = conceded.keeper;
   if (k.state !== 'down') { k.state = 'down'; k.stateT = 2; k.lyingDir = -conceded.dir; k.expr = 'hurt'; }
   for (const p of M.all) { p.celebrate = p.team === team; p.charging = false; if (p.team === conceded && p.state === 'normal') p.expr = 'hurt'; }
@@ -1153,21 +1175,21 @@ function keeperContact(k) {
       b.owner = k; b.lastTouch = k; b.vx = b.vy = b.vz = 0; b.shot = null; b.passTarget = null;
       if (k.state !== 'dive') k.state = 'hold'; k.holdAfterDive = true; k.stateT = 0.9;
       if (k.state === 'dive') { k.state = 'hold'; k.stateT = 1.0; }
-      SFX.thud();
+      SFX.catchBall(clamp(sp / 1200, 0.2, 1));
     } else {
       b.vx = -goalSide * Math.abs(b.vx) * 0.45 + rand(-50, 50); b.vy = rand(-1, 1) * 420; b.vz = 260; b.shot = null;
       b.lockP = k; b.lockT = 0.4; b.lastTouch = k;
-      SFX.thud(); shake(5);
+      SFX.parry(); shake(5);
     }
     if (isShot) {
       k.stats.saves++;
-      floatText(k.x, k.y, 90, pick(KEEPER_SAVE_WORDS), '#a5ffd6', 28);
-      excite(0.7); SFX.cheer(0.5);
+      { const w = pick(KEEPER_SAVE_WORDS); floatText(k.x, k.y, 90, w, '#a5ffd6', 28); VOX.say(k, w, 'save', 0.1); }
+      excite(0.7); SFX.cheer(0.5); if (sp > 1000) SFX.crowdOoh(0.8);
       if (sp > 900 || Math.random() < 0.4) say(COMMENTARY.save, {}, 1);
     }
   } else {
     b.keeperIgnore = k;
-    if (isShot) { floatText(k.x, k.y, 90, pick(KEEPER_FAIL_WORDS), '#ffb3b3', 24); }
+    if (isShot) { const w = pick(KEEPER_FAIL_WORDS); floatText(k.x, k.y, 90, w, '#ffb3b3', 24); VOX.say(k, w, 'sad'); }
   }
 }
 
