@@ -24,10 +24,54 @@ const BTN_NAMES = ['pass', 'shoot', 'tackle', 'item', 'ability', 'dodge', 'start
 
 const Keys = { down: new Set(), pressed: new Set() };
 const GAME_CODES = new Set();
-for (const k in KB_LAYOUTS) for (const a in KB_LAYOUTS[k]) if (Array.isArray(KB_LAYOUTS[k][a])) KB_LAYOUTS[k][a].forEach(c => GAME_CODES.add(c));
 ['Escape', 'KeyP', 'Backspace', 'KeyM', 'KeyN', 'Tab'].forEach(c => GAME_CODES.add(c));
 
+// ---------------- remappable keyboard controls ----------------
+const KB_ACTIONS = ['up', 'down', 'left', 'right', 'pass', 'shoot', 'tackle', 'item', 'ability', 'dodge'];
+const ACTION_NAMES = { up: 'MOVE UP', down: 'MOVE DOWN', left: 'MOVE LEFT', right: 'MOVE RIGHT', pass: 'PASS / SWITCH', shoot: 'SHOOT (HOLD)', tackle: 'TACKLE / JUKE', item: 'USE ITEM', ability: 'POWER', dodge: 'DODGE', start: 'PAUSE' };
+const RESERVED_KEYS = new Set(['Escape', 'KeyP', 'KeyN', 'KeyM', 'Tab', 'Backspace', 'Enter', 'NumpadEnter', 'MetaLeft', 'MetaRight']);
+const KB_DEFAULTS = {};
+for (const k in KB_LAYOUTS) { KB_DEFAULTS[k] = {}; for (const a of KB_ACTIONS) KB_DEFAULTS[k][a] = KB_LAYOUTS[k][a].slice(); }
+let KEY_MAPS = {};
+try { KEY_MAPS = JSON.parse(localStorage.getItem('monate-keymaps') || '{}') || {}; } catch (e) { KEY_MAPS = {}; }
+const KEY_NAMES = { Space: 'Space', Comma: ',', Period: '.', Slash: '/', Backslash: '\\', Quote: "'", Semicolon: ';', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift', ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl', AltLeft: 'L-Alt', AltRight: 'R-Alt', CapsLock: 'Caps' };
+function keyLabel(code) {
+  if (!code) return '—';
+  if (KEY_NAMES[code]) return KEY_NAMES[code];
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad/.test(code)) return 'Num' + code.slice(6).replace('Decimal', '.').replace('Add', '+').replace('Subtract', '-').replace('Multiply', '*').replace('Divide', '/');
+  return code;
+}
+function applyKeyMaps() {
+  for (const k in KB_LAYOUTS) {
+    const L = KB_LAYOUTS[k], m = KEY_MAPS[k] || {};
+    for (const a of KB_ACTIONS) L[a] = (m[a] && m[a].length ? m[a] : KB_DEFAULTS[k][a]).slice();
+    const j = a => L[a].map(keyLabel).join(' / ') || '—';
+    L.help = { move: [L.up[0], L.left[0], L.down[0], L.right[0]].map(keyLabel).join(' '), pass: j('pass'), shoot: j('shoot'), tackle: j('tackle'), item: j('item'), ability: j('ability'), dodge: j('dodge') };
+    for (const a in L) if (Array.isArray(L[a])) L[a].forEach(c => GAME_CODES.add(c));
+  }
+}
+function saveKeyMaps() { try { localStorage.setItem('monate-keymaps', JSON.stringify(KEY_MAPS)); } catch (e) { /* ignore */ } }
+// bind `code` to kb/action; whoever had that key before (on either keyboard) gets this action's old key
+function setKey(kb, action, code) {
+  const old = KB_LAYOUTS[kb][action].slice();
+  for (const k in KB_LAYOUTS) for (const a of KB_ACTIONS) {
+    if ((k === kb && a === action) || !KB_LAYOUTS[k][a].includes(code)) continue;
+    let rest = KB_LAYOUTS[k][a].filter(c => c !== code);
+    if (!rest.length) rest = k === kb ? old.filter(c => c !== code).slice(0, 1) : [];
+    KEY_MAPS[k] = KEY_MAPS[k] || {}; KEY_MAPS[k][a] = rest;
+  }
+  KEY_MAPS[kb] = KEY_MAPS[kb] || {}; KEY_MAPS[kb][action] = [code];
+  applyKeyMaps(); saveKeyMaps();
+}
+function resetKeys(kb) { delete KEY_MAPS[kb]; applyKeyMaps(); saveKeyMaps(); }
+applyKeyMaps();
+
+const inDomUi = e => !!(e.target && e.target.closest && e.target.closest('.dom-ui'));
 window.addEventListener('keydown', e => {
+  if (inDomUi(e)) return; // typing in a form (e.g. suggest a character)
   if (GAME_CODES.has(e.code)) e.preventDefault();
   if (!Keys.down.has(e.code)) Keys.pressed.add(e.code);
   Keys.down.add(e.code);
@@ -59,6 +103,7 @@ const Touch = {
 };
 function touchPos(t) { return { x: t.clientX, y: t.clientY }; }
 function handleTouch(e) {
+  if (inDomUi(e)) return;
   e.preventDefault();
   SFX.init();
   Touch.active = true;
@@ -147,11 +192,78 @@ function savePadMaps() { try { localStorage.setItem('monate-padmaps', JSON.strin
 // a bind is {b: buttonIndex} or {a: axisIndex, s: sign} or {a, hat: value}
 function bindValue(gp, bind) {
   if (!bind) return 0;
+  if (Array.isArray(bind)) return bind.reduce((m, b) => Math.max(m, bindValue(gp, b)), 0);
   if (bind.b !== undefined) { const b = gp.buttons[bind.b]; return b ? (b.pressed ? 1 : b.value || 0) : 0; }
   const v = gp.axes[bind.a];
   if (v === undefined) return 0;
   if (bind.hat !== undefined) return Math.abs(v - bind.hat) < 0.16 ? 1 : 0;
   return clamp(v * bind.s, 0, 1);
+}
+
+// Full bind table for a pad: its custom map, or one built from how it is read by default,
+// so a single action can be remapped without losing the others (stick + D-pad keep working).
+const PAD_ACTIONS = ['up', 'down', 'left', 'right', 'pass', 'shoot', 'tackle', 'item', 'ability', 'dodge', 'start'];
+function defaultPadBinds(gp, family) {
+  if (gp.mapping === 'standard') return {
+    up: [{ a: 1, s: -1 }, { b: 12 }], down: [{ a: 1, s: 1 }, { b: 13 }], left: [{ a: 0, s: -1 }, { b: 14 }], right: [{ a: 0, s: 1 }, { b: 15 }],
+    pass: [{ b: 0 }], shoot: [{ b: 1 }, { b: 7 }], tackle: [{ b: 2 }, { b: 6 }], item: [{ b: 3 }], ability: [{ b: 4 }], dodge: [{ b: 5 }], start: [{ b: 9 }],
+  };
+  let P = RAW_PROFILES[family] || RAW_PROFILES.generic;
+  if (family === 'xbox' && gp.buttons.length >= 15) P = RAW_PROFILES.xboxBT;
+  const m = { up: [{ a: 1, s: -1 }], down: [{ a: 1, s: 1 }], left: [{ a: 0, s: -1 }], right: [{ a: 0, s: 1 }] };
+  if (gp.axes.length > 9) { m.up.push({ a: 9, hat: -1 }); m.right.push({ a: 9, hat: -1 + 4 / 7 }); m.down.push({ a: 9, hat: -1 + 8 / 7 }); m.left.push({ a: 9, hat: -1 + 12 / 7 }); }
+  else if (gp.axes.length >= 8) { m.up.push({ a: 7, s: -1 }); m.down.push({ a: 7, s: 1 }); m.left.push({ a: 6, s: -1 }); m.right.push({ a: 6, s: 1 }); }
+  if (gp.buttons.length > 15) { m.up.push({ b: 12 }); m.down.push({ b: 13 }); m.left.push({ b: 14 }); m.right.push({ b: 15 }); }
+  const f = P.face, tr = k => [{ b: P.trig[k] }].concat(P.trigAxes ? [{ a: P.trigAxes[k], s: 1 }] : []);
+  Object.assign(m, { pass: [{ b: f[0] }], shoot: [{ b: f[1] }, ...tr(1)], tackle: [{ b: f[2] }, ...tr(0)], item: [{ b: f[3] }], ability: [{ b: P.shoulder[0] }], dodge: [{ b: P.shoulder[1] }], start: P.start.map(b => ({ b })) });
+  return m;
+}
+function padBinds(gp, family) {
+  const c = PAD_MAPS[gp.id];
+  if (!c) return defaultPadBinds(gp, family);
+  const out = {};
+  for (const a of PAD_ACTIONS) out[a] = c[a] ? (Array.isArray(c[a]) ? c[a] : [c[a]]) : [];
+  return out;
+}
+const sameBind = (x, y) => x && y && x.b === y.b && x.a === y.a && x.s === y.s && x.hat === y.hat;
+function setPadBind(gp, family, action, bind) {
+  const m = padBinds(gp, family), old = m[action];
+  for (const a of PAD_ACTIONS) {
+    if (a === action || !m[a].some(b => sameBind(b, bind))) continue;
+    m[a] = m[a].filter(b => !sameBind(b, bind));
+    if (!m[a].length) m[a] = old.filter(b => !sameBind(b, bind));
+  }
+  m[action] = [bind];
+  PAD_MAPS[gp.id] = m; savePadMaps();
+}
+function resetPad(gp) { delete PAD_MAPS[gp.id]; savePadMaps(); }
+const STD_BTN = {
+  xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'L-Stick', 'R-Stick', 'D↑', 'D↓', 'D←', 'D→', 'Xbox'],
+  ps: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', 'D↑', 'D↓', 'D←', 'D→', 'PS'],
+  switch: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L-Stick', 'R-Stick', 'D↑', 'D↓', 'D←', 'D→', 'Home'],
+};
+function describeBind(bind, gp, family) {
+  if (!bind) return '—';
+  if (bind.b !== undefined) {
+    const names = gp && gp.mapping === 'standard' ? (STD_BTN[family] || (['eightbitdo', 'retro'].includes(family) ? STD_BTN.switch : STD_BTN.xbox)) : null;
+    return names && names[bind.b] ? names[bind.b] : 'Button ' + (bind.b + 1);
+  }
+  if (bind.hat !== undefined) { const i = clamp(Math.round((bind.hat + 1) / (2 / 7)), 0, 7); return 'D' + ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][i]; }
+  const dir = bind.a % 2 ? (bind.s < 0 ? '↑' : '↓') : (bind.s < 0 ? '←' : '→');
+  if (bind.a <= 1) return 'Stick ' + dir;
+  if (bind.a <= 3 && gp && gp.mapping === 'standard') return 'R-Stick ' + dir;
+  if (bind.a >= 6 && bind.a <= 7) return 'D' + dir;
+  return 'Axis ' + (bind.a + 1) + (bind.s < 0 ? '−' : '+');
+}
+// a human-readable label for one action on one device ('G / K / Space', 'B / RT', 'SHOOT')
+function actionLabel(id, action) {
+  if (id === 'kb1' || id === 'kb2') return (KB_LAYOUTS[id][action] || []).map(keyLabel).join(' / ') || '—';
+  if (id === 'touch') return action === 'up' || action === 'down' || action === 'left' || action === 'right' ? 'Left thumb' : (TOUCH_HELP[action] || action.toUpperCase());
+  const d = Input.devices[id], gp = Input.padFor(id);
+  if (!gp) return PAD_HELP[action] || '—';
+  const bs = padBinds(gp, d.family)[action] || [];
+  const seen = []; for (const b of bs) { const n = describeBind(b, gp, d.family); if (!seen.includes(n)) seen.push(n); }
+  return seen.join(' / ') || '—';
 }
 
 // ---------------- mouse / pointer (menus are fully clickable) ----------------
@@ -228,6 +340,7 @@ const Input = {
     // keyboards
     for (const id of ['kb1', 'kb2']) {
       const L = KB_LAYOUTS[id], d = this.devices[id];
+      if (this.capture && this.capture.kb) { d.mx = d.my = 0; BTN_NAMES.forEach(b => this._setBtn(d[b], false)); continue; }
       let x = (any(L.right) ? 1 : 0) - (any(L.left) ? 1 : 0), y = (any(L.down) ? 1 : 0) - (any(L.up) ? 1 : 0);
       if (x && y) { x *= Math.SQRT1_2; y *= Math.SQRT1_2; }
       d.mx = x; d.my = y;
