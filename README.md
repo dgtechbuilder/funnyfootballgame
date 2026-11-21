@@ -6,7 +6,7 @@ Monate Cup is a chaotic, arcade-style football game for 1–6 players that runs 
 
 - **Teams:** 4 outfield players plus a goalkeeper, led by larger-than-life captains from across Africa.
 - **View:** a low, side-on broadcast camera.
-- **Characters:** chunky, rounded-block figures in the spirit of Roblox avatars, but softer and less boxy.
+- **Characters:** chunky Roblox-style avatars built from shaded 3D blocks that turn to face where they run.
 - **No assets:** everything is drawn and synthesized in code, including the Afrobeats / amapiano soundtrack and the vuvuzelas.
 - **No build step:** just open the page.
 
@@ -254,7 +254,7 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`.
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
 | `js/audio.js` | WebAudio sound effects, vuvuzelas and the Afrobeats / amapiano sequencer |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, rumble |
-| `js/draw.js` | Drawing helpers, and the procedural characters and ball |
+| `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |
 | `js/game.js` | Match simulation: physics, AI, keepers, tackles, dodges, shots, super and hyper strikes, powers, items, hazards, gear |
 | `js/render.js` | Perspective camera, stadiums, crowd, pitch, entities, effects, meters and HUD |
 | `js/main.js` | Clickable menus, controller setup and remap wizard, pause, results, and the main loop |

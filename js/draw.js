@@ -316,116 +316,280 @@ function drawSkeleton(c, o) {
   c.fillStyle = '#111'; c.fillRect(-4, -46, 8, 1.6);
 }
 
+// ---------------------------------------------------------------------------
+//  Blocky avatar parts. Each body part is a flat-shaded box in a tiny 3D
+//  space: a = lateral, f = forward, h = up. Boxes turn with the player's
+//  facing and are drawn with a parallel projection, so a whole character
+//  costs about 25 small polygon fills: no gradients, shadows or offscreen
+//  canvases.
+// ---------------------------------------------------------------------------
+const RB_K = 0.4;              // how much of the top faces the camera sees
+const RB_EDGE = '#1a1420';
+const RB_LIGHT = (() => { const v = [-0.5, 0.55, 0.67], n = Math.hypot(v[0], v[1], v[2]); return v.map(q => q / n); })();
+const _rbX = new Float32Array(8), _rbY = new Float32Array(8);
+const _rbShade = new Uint8Array(6);    // last block's shade step per face: -a, +a, -f, +f, -h, +h
+const _rbV = { sa: 0, ca: 1 };
+const _rbVis = new Uint8Array(6);
+const RB_OUTLINE = 1, RB_NOTOP = 2;
+const RB_DARK = Array.from({ length: 11 }, (_, i) => `rgba(0,0,0,${(i * 0.045).toFixed(3)})`);
+// side faces as [bottom0, bottom1, top1, top0]; corner index = a + 2f + 4h
+const RB_SIDES = [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6]];
+const RB_CAPS = [[0, 1, 3, 2], [4, 5, 7, 6]];
+// the 12 edges as [corner, corner, face, face]; an edge is on the outline when
+// exactly one of its two faces is visible
+const RB_EDGES = [[0, 1, 2, 4], [2, 3, 3, 4], [4, 5, 2, 5], [6, 7, 3, 5], [0, 2, 0, 4], [1, 3, 1, 4],
+  [4, 6, 0, 5], [5, 7, 1, 5], [0, 4, 0, 2], [1, 5, 1, 2], [2, 6, 0, 3], [3, 7, 1, 3]];
+
+function rbAmt(gx, gy, h) {
+  // light -> shade step: 0 = 10% lighter ... each step 4% darker
+  const lam = gx * RB_LIGHT[0] + gy * RB_LIGHT[1] + h * RB_LIGHT[2];
+  return Math.round(8.5 * (1 - Math.max(-0.2, lam)));
+}
+// shaded colour lookup: rbShadeCol(col, step) == shade(col, 0.1 - step * 0.04)
+const _rbCols = new Map();
+function rbShadeCol(col, step) {
+  let a = _rbCols.get(col);
+  if (!a) { if (_rbCols.size > 600) _rbCols.clear(); a = []; _rbCols.set(col, a); }
+  return a[step] || (a[step] = shade(col, Math.round((0.1 - step * 0.04) * 100) / 100));
+}
+function rbPoly(c, i0, i1, i2, i3) {
+  c.moveTo(_rbX[i0], _rbY[i0]); c.lineTo(_rbX[i1], _rbY[i1]); c.lineTo(_rbX[i2], _rbY[i2]); c.lineTo(_rbX[i3], _rbY[i3]); c.closePath();
+}
+
+// One box. (pa, pf, ph) is the pivot; extents are relative to it. The box is
+// rolled about the forward axis, then pitched about the lateral axis (a
+// positive pitch swings a hanging limb forward). segs = [[frac, colour], ...]
+// colours the box in horizontal bands from the bottom up (frac is the top of
+// each band, 0..1), which gives sleeves, socks and gloves for free.
+// flags: RB_OUTLINE strokes the silhouette, RB_NOTOP skips a hidden top face.
+function rbBlock(c, pa, pf, ph, a0, a1, f0, f1, h0, h1, roll, pitch, segs, flags = RB_OUTLINE) {
+  const sa = _rbV.sa, ca = _rbV.ca, K = RB_K;
+  const cr = Math.cos(roll), sr = Math.sin(roll), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  // rotated local axes, in (a, f, h)
+  const Aa = cr, Af = -sr * sp, Ah = sr * cp;
+  const Ff = cp, Fh = sp;
+  const Ha = -sr, Hf = -cr * sp, Hh = cr * cp;
+  // to world (gx, gy, h)
+  const Agx = Aa * ca + Af * sa, Agy = -Aa * sa + Af * ca;
+  const Fgx = Ff * sa, Fgy = Ff * ca;
+  const Hgx = Ha * ca + Hf * sa, Hgy = -Ha * sa + Hf * ca;
+  // to screen: sx = gx, sy = gy*K - h
+  const Asy = Agy * K - Ah, Fsy = Fgy * K - Fh, Hsy = Hgy * K - Hh;
+  const ox = pa * ca + pf * sa, oy = (-pa * sa + pf * ca) * K - ph;
+  for (let i = 0; i < 8; i++) {
+    const a = i & 1 ? a1 : a0, f = i & 2 ? f1 : f0, h = i & 4 ? h1 : h0;
+    _rbX[i] = ox + a * Agx + f * Fgx + h * Hgx;
+    _rbY[i] = oy + a * Asy + f * Fsy + h * Hsy;
+  }
+  // face visibility: normal . (0, 1, K) > 0 ; normals -A,+A,-F,+F,-H,+H
+  const vA = Agy + K * Ah, vF = Fgy + K * Fh, vH = Hgy + K * Hh;
+  _rbShade[0] = rbAmt(-Agx, -Agy, -Ah); _rbShade[1] = rbAmt(Agx, Agy, Ah);
+  _rbShade[2] = rbAmt(-Fgx, -Fgy, -Fh); _rbShade[3] = rbAmt(Fgx, Fgy, Fh);
+  _rbShade[4] = rbAmt(-Hgx, -Hgy, -Hh); _rbShade[5] = rbAmt(Hgx, Hgy, Hh);
+  const vis = _rbVis;
+  vis[0] = vA < -0.01; vis[1] = vA > 0.01; vis[2] = vF < -0.01; vis[3] = vF > 0.01; vis[4] = vH < -0.01; vis[5] = vH > 0.01;
+  if (flags & RB_NOTOP) vis[5] = 0;
+  // Side faces: paint every colour band across the visible sides in one
+  // fill using the brighter side's shade, then darken the other side with a
+  // single translucent overlay. At most two side faces can face the camera.
+  let s0 = -1, s1 = -1;
+  for (let k = 0; k < 4; k++) if (vis[k]) { if (s0 < 0) s0 = k; else s1 = k; }
+  if (s1 >= 0 && _rbShade[s1] < _rbShade[s0]) { const q = s0; s0 = s1; s1 = q; }
+  if (s0 >= 0) {
+    const base = _rbShade[s0], n = segs.length;
+    let lo = 0;
+    for (let j = 0; j < n; j++) {
+      const hi = segs[j][0];
+      c.beginPath();
+      for (let m = 0; m < 2; m++) {
+        const k = m ? s1 : s0;
+        if (k < 0) continue;
+        const q = RB_SIDES[k];
+        const bx0 = _rbX[q[0]], by0 = _rbY[q[0]], bx1 = _rbX[q[1]], by1 = _rbY[q[1]];
+        const dx0 = _rbX[q[3]] - bx0, dy0 = _rbY[q[3]] - by0, dx1 = _rbX[q[2]] - bx1, dy1 = _rbY[q[2]] - by1;
+        c.moveTo(bx0 + dx0 * lo, by0 + dy0 * lo); c.lineTo(bx1 + dx1 * lo, by1 + dy1 * lo);
+        c.lineTo(bx1 + dx1 * hi, by1 + dy1 * hi); c.lineTo(bx0 + dx0 * hi, by0 + dy0 * hi); c.closePath();
+      }
+      c.fillStyle = rbShadeCol(segs[j][1], base); c.fill();
+      lo = hi;
+    }
+    if (s1 >= 0 && _rbShade[s1] > base) {
+      const q = RB_SIDES[s1];
+      c.beginPath(); rbPoly(c, q[0], q[1], q[2], q[3]);
+      c.fillStyle = RB_DARK[Math.min(10, _rbShade[s1] - base)]; c.fill();
+    }
+  }
+  for (let k = 0; k < 2; k++) {
+    if (!vis[4 + k]) continue;
+    const q = RB_CAPS[k];
+    c.beginPath(); rbPoly(c, q[0], q[1], q[2], q[3]);
+    c.fillStyle = rbShadeCol(segs[k ? segs.length - 1 : 0][1], _rbShade[4 + k]); c.fill();
+  }
+  if (flags & RB_OUTLINE) {
+    // outline only; inner edges show through the shading
+    c.beginPath();
+    for (let k = 0; k < 12; k++) {
+      const e = RB_EDGES[k];
+      if (vis[e[2]] !== vis[e[3]]) { c.moveTo(_rbX[e[0]], _rbY[e[0]]); c.lineTo(_rbX[e[1]], _rbY[e[1]]); }
+    }
+    c.strokeStyle = RB_EDGE; c.lineWidth = 1.2; c.stroke();
+  }
+  return vis;
+}
+
+// Map the face spanned by corners o (top-left), u (top-right) and v
+// (bottom-left) of the last block onto a w x h rectangle, for drawing
+// kit details on it. Caller must save()/restore().
+function rbFaceSpace(c, o, u, v, w, h) {
+  c.transform((_rbX[u] - _rbX[o]) / w, (_rbY[u] - _rbY[o]) / w, (_rbX[v] - _rbX[o]) / h, (_rbY[v] - _rbY[o]) / h, _rbX[o], _rbY[o]);
+}
+
+// Shared rounded-block head (HEAD_W x HEAD_H, see headPath), lit from the upper left.
+function rbHead(c, skin) {
+  const w = HEAD_W / 2, h = HEAD_H / 2;
+  headPath(c); c.fillStyle = shade(skin, -0.22); c.fill();
+  c.strokeStyle = RB_EDGE; c.lineWidth = 1.3; c.stroke();
+  rrect(c, -w + 1.2, -h + 1.2, HEAD_W - 6.5, HEAD_H - 2.4, HEAD_R - 1); c.fillStyle = skin; c.fill();
+  ellipse(c, -1.8, -h + 4.6, w - 4.5, 3.4, shade(skin, 0.13));
+}
+
 function drawCharacter(c, o, x, y, s) {
   const look = o.role === 'captain' ? LOOKS[o.look] : null;
+  const keeper = o.role === 'keeper';
   const fx = Math.cos(o.face), fy = Math.sin(o.face);
-  const back = fy < -0.62;
   const run = clamp(o.moving, 0, 1);
   const t = o.anim;
   const ph = t * 15;
   const bob = (Math.abs(Math.sin(ph)) * 2.6 * run) + (o.dance ? Math.abs(Math.sin(t * 9)) * 5 : 0) + (o.armsUp ? Math.abs(Math.sin(t * 10)) * 8 : 0);
-  const headR = look ? look.headR : (o.role === 'keeper' ? 15.5 : 14.5);
-  const bw = look ? look.bodyW : (o.role === 'keeper' ? 1.15 : 1.0);
+  const bw = look ? look.bodyW : (keeper ? 1.15 : 1.0);
   const P = col => tintCol(col, o.tint);
+
+  // Yaw on screen: 0 faces the camera, +-PI/2 is side-on, PI faces away.
+  // Squeezed toward a three-quarter view so the boxy bodies stay wide while
+  // players run left and right. Spins turn the whole avatar.
+  const ay = Math.atan2(fx, fy), ady = Math.abs(ay);
+  let yaw = ady < 2.24 ? ay * (0.62 / 2.24) : Math.sign(ay) * (Math.PI - (Math.PI - ady) * (0.62 / (Math.PI - 2.24)));
+  if (o.spin) yaw += t * 28;
+  const sa = Math.sin(yaw), ca = Math.cos(yaw);
+  _rbV.sa = sa; _rbV.ca = ca;
+  const back = ca < -0.2;
+  const vfx = clamp(sa * 1.5, -1, 1);   // where the face sits on the head
 
   c.save();
   c.translate(x, y); c.scale(s, s);
   let sx = 1, sy = 1;
-  if (o.spin) sx = Math.cos(t * 28);
   if (o.flat) { sx *= 1 + o.flat * 0.8; sy *= 1 - o.flat * 0.72; }
   if (o.lying) { c.translate(0, -8); c.rotate(o.lyingDir * Math.PI / 2); c.translate(0, 8 - 4); }
   if (o.dance) c.rotate(Math.sin(t * 9) * 0.22);
   c.scale(sx, sy);
+  c.lineJoin = 'round';
 
   if (o.tint === 'zap' && Math.floor(t * 18) % 2 === 0) { drawSkeleton(c, o); c.restore(); return; }
-  void headR;
-  const OUT = '#1a1a1a';
-  const kitCol = P(o.role === 'keeper' ? o.kit2 : (look && look.labcoat ? '#f2f2f2' : o.kit));
-  const legCol = P(o.role === 'keeper' ? '#2a2a2a' : shade(o.kit, -0.5));
-  const tw = 26 * bw, th = look && look.belly ? 25 : 23, ty = -14 - th - bob; // torso box
 
-  // legs: two rounded blocks that lift alternately when running
-  const sw = Math.sin(ph) * run;
-  const kickSide = fx >= 0 ? 1 : -1;
-  for (const sd of [-1, 1]) {
-    const lift = Math.max(0, sd * sw) * 5;
-    const lw = tw / 2 - 1.5, lx = sd < 0 ? -tw / 2 + 0.5 : 1;
-    const ly = -15 - bob * 0.3, lh = 15 - lift + bob * 0.3;
-    c.save();
-    c.translate(lx + lw / 2 + fx * sd * sw * 1.5, ly);
-    if (o.kick > 0 && sd === kickSide) c.rotate(-kickSide * Math.sin(o.kick * Math.PI) * 1.25); // swing the kicking leg
-    c.fillStyle = legCol; rrect(c, -lw / 2, 0, lw, lh, 4); c.fill();
-    c.strokeStyle = OUT; c.lineWidth = 1.2; c.stroke();
-    c.fillStyle = P(look && look.runner ? '#7CFC00' : '#1b1b1b'); rrect(c, -lw / 2 + fx * 1.5, lh - 4, lw, 4.5, 2); c.fill();
-    c.restore();
+  // ---- palette
+  const skin = P(o.skin);
+  const bodyCol = P(keeper ? o.kit2 : (look && look.labcoat ? '#f2f2f2' : o.kit));
+  const shorts = P(keeper ? '#222222' : shade(o.kit, -0.45));
+  const sock = P(keeper ? o.kit : o.kit2);
+  const shoe = P(look && look.runner ? '#7CFC00' : '#1b1b1b');
+  const armSegs = keeper ? [[0.3, P('#ffffff')], [1, bodyCol]]
+    : look && look.labcoat ? [[0.22, skin], [1, bodyCol]]
+    : [[0.56, skin], [1, bodyCol]];
+  const legSegs = [[0.24, shoe], [0.55, sock], [1, shorts]];
+
+  // ---- proportions (Roblox-ish: legs and torso about equal, legs half the torso wide)
+  const HIP = 17, SH = 36;
+  const tw = 20 * bw, hw = tw / 2;
+  const belly = look && look.belly;
+  const tf0 = -5.5, tf1 = belly ? 9.5 : 5.5;
+  const legW = hw - 1.2, legX = hw / 2;   // a sliver of a gap keeps the legs apart without outlines
+  const armW = keeper ? 5 : 4.2, armX = hw + armW + 0.2;
+
+  // ---- legs (farther one first); shoes, socks and shorts are colour bands
+  const legP0 = Math.sin(ph) * 0.65 * run;
+  // bob lifts the whole avatar: a little hop when running, jumps when celebrating
+  const legDepth = sd => -sd * legX * sa + HIP * Math.sin(sd * legP0) * ca;
+  const legOrder = legDepth(-1) < legDepth(1) ? [-1, 1] : [1, -1];
+  const kickSide = sa >= 0 ? 1 : -1;        // the leg nearer the camera does the kicking
+  const kickP = o.kick > 0 ? Math.sin(o.kick * Math.PI) * 1.25 : 0;
+  for (const sd of legOrder) {
+    const p = kickP && sd === kickSide ? kickP : sd * legP0;
+    rbBlock(c, sd * legX, 0, HIP + bob, -legW / 2, legW / 2, -4.5, 4.5, -HIP, 1, 0, p, legSegs, RB_NOTOP);
   }
 
-  // arms: rounded blocks hinged at the shoulder (sleeve + skin), swinging opposite the legs
-  const drawArm = (sd) => {
-    let ang = -sd * Math.sin(ph) * 0.65 * run;
-    if (o.armsUp) ang = sd * (2.6 + Math.sin(t * 12 + sd) * 0.25);
-    if (o.stretch) ang = sd * (1.45 + Math.sin(t * 20) * 0.08);
-    if (o.ears) ang = sd * 2.75;
-    else if (o.dance) ang = sd * (1.4 + Math.sin(t * 9 * sd) * 0.9);
-    c.save();
-    c.translate(sd * (tw / 2 + 4) + fx * 1, ty + 4);
-    c.rotate(ang);
-    const handCol = o.role === 'keeper' ? P('#ffffff') : P(o.skin);
-    const al = o.stretch ? 70 : 21; // stretchy keeper arms!
-    c.fillStyle = handCol; rrect(c, -4, 0, 8, al, 4); c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.2; c.stroke();
-    c.fillStyle = kitCol; rrect(c, -4.4, -0.5, 8.8, 9, 3.5); c.fill(); c.stroke();
-    if (o.role === 'keeper') { circle(c, 0, al, o.stretch ? 9 : 6.5, P('#ffffff'), OUT, 1.2); }
-    c.restore();
+  // ---- arms: pitch (swing) and roll (splay)
+  const armPose = sd => {
+    if (o.ears) return [sd * 2.75, 0];                                   // hands over the ears
+    if (o.dance) return [sd * 0.3, 1.6 + Math.sin(t * 9 + (sd > 0 ? 0 : Math.PI)) * 1.3];
+    if (o.stretch) return [sd * (1.45 + Math.sin(t * 20) * 0.08), 0];    // stretchy keeper arms, out wide
+    if (o.armsUp) return [sd * 0.38, Math.PI - 0.3 + Math.sin(t * 12 + sd) * 0.18];
+    return [sd * 0.07, -sd * Math.sin(ph) * 0.8 * run];
   };
-  if (fx >= 0) drawArm(-1); else drawArm(1);
+  const armLen = o.stretch ? 70 : 19.5;
+  const stretchSegs = o.stretch ? (keeper ? [[0.13, P('#ffffff')], [1, bodyCol]] : [[0.85, skin], [1, bodyCol]]) : armSegs;
+  const drawArm = sd => {
+    const [roll, pitch] = armPose(sd);
+    rbBlock(c, sd * armX, 0, SH - 2 + bob, -armW, armW, -4.5, 4.5, 2 - armLen, 2, roll, pitch, stretchSegs);
+  };
+  const nearSide = sa > 0 ? -1 : 1;          // the arm on this side is closer to the camera
+  const raised = o.armsUp || o.dance || o.ears;
+  drawArm(-nearSide);
 
-  // torso
-  c.fillStyle = kitCol; rrect(c, -tw / 2, ty, tw, th, 7); c.fill();
-  c.strokeStyle = OUT; c.lineWidth = 1.4; c.stroke();
-  c.save(); rrect(c, -tw / 2, ty, tw, th, 7); c.clip();
-  c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(fx >= 0 ? -tw / 2 : tw / 2 - 6, ty, 6, th);   // side shading
-  c.fillStyle = 'rgba(255,255,255,0.18)'; c.fillRect(-tw / 2, ty, tw, 4);                    // top highlight
-  if (look && look.labcoat) { c.fillStyle = P(o.kit); c.fillRect(-4, ty, 8, th); }
-  if (o.role === 'keeper') { c.fillStyle = P(o.kit); c.fillRect(-tw / 2, ty + th * 0.45, tw, 5); }
-  else { c.fillStyle = P(o.kit2); c.fillRect(-tw / 2, ty + th - 4, tw, 4); }                  // waistband
-  c.restore();
-  if (o.role !== 'keeper') { c.fillStyle = P(o.kit2); c.beginPath(); c.moveTo(-6, ty); c.lineTo(0, ty + 6); c.lineTo(6, ty); c.closePath(); c.fill(); } // V collar
-  if (look && look.towel) { c.fillStyle = P('#ffffff'); rrect(c, -tw / 2 + 1, ty + 1, 9, 16, 3); c.fill(); c.strokeStyle = '#999'; c.lineWidth = 0.8; c.stroke(); }
-  if (look && look.chain && !back) { c.strokeStyle = '#ffd43b'; c.lineWidth = 2; c.beginPath(); c.arc(fx * 3, ty + 2, 8, 0.25, Math.PI - 0.25); c.stroke(); }
-  if (o.role === 'captain' && !back) {
-    circle(c, fx * 5 - 5, ty + th * 0.48, 4.4, P(o.kit2), '#111', 1);
-    c.fillStyle = '#111'; c.font = 'bold 6px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('C', fx * 5 - 5, ty + th * 0.48 + 0.4);
+  // ---- torso
+  const th = SH - HIP + 1;
+  const tv = rbBlock(c, 0, 0, HIP - 1 + bob, -hw, hw, tf0, tf1, 0, th, 0, 0, [[1, bodyCol]]);
+  if (tv[3]) {               // chest
+    const amt = _rbShade[3], S = col => rbShadeCol(P(col), amt);
+    c.save(); rbFaceSpace(c, 6, 7, 2, tw, th);
+    if (belly) ellipse(c, hw, th * 0.62, tw * 0.34, th * 0.3, rbShadeCol(bodyCol, Math.max(0, amt - 2)));
+    if (keeper) { c.fillStyle = S(o.kit); c.fillRect(0, th * 0.34, tw, 4.5); }
+    else if (look && look.labcoat) {
+      c.fillStyle = S(o.kit); c.fillRect(hw - 3.5, 0, 7, th);
+      c.strokeStyle = S('#bdbdbd'); c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(hw - 3.5, 0); c.lineTo(hw - 1, 8); c.moveTo(hw + 3.5, 0); c.lineTo(hw + 1, 8); c.stroke();
+    } else {
+      c.fillStyle = S(o.kit2); c.beginPath(); c.moveTo(hw - 5, 0); c.lineTo(hw + 5, 0); c.lineTo(hw, 5.5); c.closePath(); c.fill();
+      c.fillRect(0, th - 3, tw, 3);
+    }
+    if (look && look.towel) { c.fillStyle = S('#ffffff'); rrect(c, 1, -1, 7, 15, 2.5); c.fill(); c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 0.8; c.stroke(); }
+    if (look && look.chain) { c.strokeStyle = S('#ffd43b'); c.lineWidth = 2; c.beginPath(); c.arc(hw, 0, 7, 0.25, Math.PI - 0.25); c.stroke(); }
+    if (o.role === 'captain') {
+      const bx = tw * 0.74, by = th * 0.4;
+      circle(c, bx, by, 3.9, S(o.kit2), '#111', 1);
+      c.fillStyle = '#111'; c.font = 'bold 6px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('C', bx, by + 0.4);
+    }
+    c.restore();
+  } else if (tv[2]) {        // back: shirt number
+    const amt = _rbShade[2];
+    c.save(); rbFaceSpace(c, 5, 4, 1, tw, th);
+    if (look && look.towel) { c.fillStyle = rbShadeCol(P('#ffffff'), amt); rrect(c, tw - 8, -1, 7, 12, 2.5); c.fill(); }
+    if (o.number) { c.fillStyle = rbShadeCol(P(keeper ? o.kit : o.kit2), amt); c.font = `bold 11px ${FONT_UI}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(o.number, hw, th * 0.48); }
+    c.restore();
   }
-  if (o.number && back) { c.fillStyle = P(o.kit2); c.font = `bold 11px ${FONT_UI}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(o.number, 0, ty + th * 0.48); }
-  if (fx >= 0) drawArm(1); else drawArm(-1);
+  if (!raised) drawArm(nearSide);
 
-  // head: a softened Roblox-style rounded block
+  // ---- head (2D rounded cylinder; hats and faces are drawn on it as before)
   c.save();
-  c.translate(fx * 1.5, ty - HEAD_H / 2 + 1);
-  if (look && look.behind) look.behind(c, P, fx, fy, back, t, o);
-  c.fillStyle = P(o.skin); headPath(c); c.fill();
-  c.save(); headPath(c); c.clip();
-  c.fillStyle = 'rgba(0,0,0,0.13)'; c.fillRect(fx >= 0 ? -HEAD_W / 2 : HEAD_W / 2 - 5, -HEAD_H / 2, 5, HEAD_H);
-  c.fillStyle = 'rgba(255,255,255,0.16)'; c.fillRect(-HEAD_W / 2, -HEAD_H / 2, HEAD_W, 4);
-  c.restore();
-  c.strokeStyle = OUT; c.lineWidth = 1.4; headPath(c); c.stroke();
+  c.translate(sa * 1.5, -(SH + HEAD_H / 2 - 1) - bob);
+  if (look && look.behind) look.behind(c, P, vfx, fy, back, t, o);
+  rbHead(c, skin);
   if (!back) {
-    const hide = look && look.hideEyes && o.expr !== 'hurt';
-    if (!hide) drawEyes(c, P, fx, fy, o.expr);
-    drawMouth(c, P, fx, fy, o.expr, look && look.mouthOffset ? look.mouthOffset : 0);
+    if (!(look && look.hideEyes && o.expr !== 'hurt')) drawEyes(c, P, vfx, fy, o.expr);
+    drawMouth(c, P, vfx, fy, o.expr, look && look.mouthOffset ? look.mouthOffset : 0);
   }
-  if (look && look.front) look.front(c, P, fx, fy, back, t, o);
-  if (!look && o.role === 'sidekick' && SIDEKICK_HATS[o.hat]) SIDEKICK_HATS[o.hat](c, P, fx, fy, back, o);
-  if (o.role === 'keeper') {
+  if (look && look.front) look.front(c, P, vfx, fy, back, t, o);
+  if (!look && o.role === 'sidekick' && SIDEKICK_HATS[o.hat]) SIDEKICK_HATS[o.hat](c, P, vfx, fy, back, o);
+  if (keeper) {
     hairCap(c, P(o.kit), 10);
-    c.fillStyle = P(shade(o.kit, -0.3)); c.beginPath(); c.ellipse(fx * 11, -4, 9 * Math.max(0.3, Math.abs(fx)), 3, 0, 0, TAU); c.fill();
+    c.fillStyle = P(shade(o.kit, -0.3)); c.beginPath(); c.ellipse(vfx * 11, -4, 9 * Math.max(0.3, Math.abs(vfx)), 3, 0, 0, TAU); c.fill();
   }
   c.restore();
+  if (raised) drawArm(nearSide);
 
   if (o.tint === 'ice') {
-    c.fillStyle = 'rgba(170,230,255,0.45)'; rrect(c, -22, -72, 44, 74, 6); c.fill();
+    c.fillStyle = 'rgba(170,230,255,0.45)'; rrect(c, -24, -72, 48, 74, 6); c.fill();
     c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2; c.stroke();
-    c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(-16, -66, 5, 30); c.fillRect(-8, -66, 3, 14);
+    c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(-18, -66, 5, 30); c.fillRect(-10, -66, 3, 14);
   }
   c.restore();
 }
