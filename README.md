@@ -228,7 +228,7 @@ These all sit on top of each stadium's own hazards: lightning, power cuts, meteo
 | Option | Choices |
 |---|---|
 | Match length | 1, 2, 3 or 5 minutes |
-| CPU difficulty | Gentle, Pepper, Scotch Bonnet |
+| CPU difficulty | Five levels: **1 Plain Pap** (training: the CPU is slow, almost never tackles, rarely steals and its keeper lets plenty in), **2 Gentle** (the default), **3 Pepper**, **4 Scotch Bonnet**, **5 Peri-Peri** (no mercy) |
 | Power-ups | On / off |
 | Stadium hazards | On / off |
 | Golden goal on a draw | On / off |

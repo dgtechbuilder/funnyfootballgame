@@ -12,7 +12,7 @@ const REMAP_STEPS = [
   ['dodge', 'PRESS: DODGE', 'usually the RIGHT shoulder (RB / R1 / R)'],
   ['start', 'PRESS: PAUSE', 'Start / Menu / Options / +'],
 ];
-const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'normal', items: true, hazards: true, golden: true, gearL: 'none', gearR: 'none' };
+const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'easy', items: true, hazards: true, golden: true, gearL: 'none', gearR: 'none' };
 
 const App = {
   cv: null, c: null, W: 1280, H: 720, dpr: 1, t: 0,
@@ -194,7 +194,7 @@ const App = {
   optionRows() {
     return [
       { label: 'Match Length', vals: [1, 2, 3, 5], key: 'minutes', fmt: v => `${v} MIN` },
-      { label: 'CPU Difficulty', vals: ['easy', 'normal', 'hard'], key: 'difficulty', fmt: v => ({ easy: 'GENTLE', normal: 'PEPPER', hard: 'SCOTCH BONNET' })[v] },
+      { label: 'CPU Difficulty', vals: DIFF_KEYS, key: 'difficulty', fmt: v => DIFF_NAMES[v] || v, hint: v => DIFF_HINTS[v] || '' },
       { label: 'Power-Ups', vals: [true, false], key: 'items', fmt: v => v ? 'CHAOS ON' : 'OFF' },
       { label: 'Stadium Hazards', vals: [true, false], key: 'hazards', fmt: v => v ? 'ON' : 'OFF' },
       { label: 'Golden Goal On Draw', vals: [true, false], key: 'golden', fmt: v => v ? 'ON' : 'OFF' },

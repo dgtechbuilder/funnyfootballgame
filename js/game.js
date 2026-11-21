@@ -9,11 +9,20 @@ const GRAV = 1150;
 const CHARGE_TIME = 0.32, SWEET_TIME = 0.6;
 const FORM = [{ x: 0.58, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.4, y: 0.8 }, { x: 0.22, y: 0.5 }];
 const HUMAN_COLORS = ['#ff4d4d', '#4dabf7', '#ffd43b', '#51cf66', '#f783ac', '#ffa94d', '#b197fc'];
+// CPU difficulty, level 1 (training) to 5. Applies to CPU-only teams.
+//  react: keeper reaction delay (s) | acc: shooting/decision accuracy | tackle: how often the CPU tackles
+//  steal: body-contact steal rate | keeper: save-chance multiplier | speed: run speed | item: item/ability use
+//  power: CPU shot power | chasers: CPU players pressing your ball carrier | knock: how long CPU tackles keep you down
 const DIFF = {
-  easy:   { react: 0.32, acc: 0.55, tackle: 0.55, keeper: 0.78, superAcc: 0.35, speed: 0.9, item: 0.5 },
-  normal: { react: 0.18, acc: 0.78, tackle: 1.0, keeper: 1.0, superAcc: 0.62, speed: 1.0, item: 1 },
-  hard:   { react: 0.09, acc: 0.95, tackle: 1.5, keeper: 1.12, superAcc: 0.85, speed: 1.06, item: 1.4 },
+  rookie: { react: 0.6,  acc: 0.3,  tackle: 0.07, steal: 0.08, keeper: 0.38, superAcc: 0.2,  speed: 0.74, item: 0.15, power: 0.65, chasers: 1, knock: 0.5 },
+  easy:   { react: 0.38, acc: 0.5,  tackle: 0.22, steal: 0.3,  keeper: 0.6,  superAcc: 0.35, speed: 0.86, item: 0.4,  power: 0.8,  chasers: 1, knock: 0.7 },
+  normal: { react: 0.18, acc: 0.78, tackle: 0.5,  steal: 0.7,  keeper: 0.92, superAcc: 0.62, speed: 1.0,  item: 1,    power: 1,    chasers: 2, knock: 0.9 },
+  hard:   { react: 0.1,  acc: 0.92, tackle: 0.85, steal: 1,    keeper: 1.08, superAcc: 0.85, speed: 1.05, item: 1.4,  power: 1,    chasers: 2, knock: 1 },
+  insane: { react: 0.06, acc: 1,    tackle: 1.25, steal: 1.25, keeper: 1.18, superAcc: 0.95, speed: 1.1,  item: 1.7,  power: 1.05, chasers: 2, knock: 1 },
 };
+const DIFF_KEYS = ['rookie', 'easy', 'normal', 'hard', 'insane'];
+const DIFF_NAMES = { rookie: '1 · PLAIN PAP', easy: '2 · GENTLE', normal: '3 · PEPPER', hard: '4 · SCOTCH BONNET', insane: '5 · PERI-PERI' };
+const DIFF_HINTS = { rookie: 'Training: CPU barely tackles', easy: 'Relaxed: rare tackles', normal: 'A fair fight', hard: 'Tough tackling CPU', insane: 'No mercy' };
 const SAVE_P = { boulder: 0.22, zigzag: 0.25, split: 0.2, sky: 0.18, teleport: 0.14, curve: 0.25, dance: 0.05, cannon: 0.26 };
 const SUPER_STYLE = { hyperArc: 'fire', boulder: 'bus', zigzag: 'electric', split: 'jollof', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
 const SUPER_SIZE = { hyperArc: 1.7, boulder: 2.6, split: 1.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
@@ -49,7 +58,7 @@ function makeTeam(side, cap, kit, humans, diffKey, gearKey = 'none') {
     side, dir: side === 0 ? 1 : -1, cap, kit, kit2: cap.color2, name: cap.team, score: 0, items: [],
     humans: humans.map(dev => ({ dev, player: null, cd: 0, color: HUMAN_COLORS[Input.order.indexOf(dev)] || '#fff', label: 'P' + (Input.order.indexOf(dev) + 1) })),
     players: [], keeper: null, chasers: [], itemAI: rand(3, 6), itemFlash: 0,
-    ai: DIFF[humans.length ? 'normal' : diffKey], diffKey: humans.length ? 'normal' : diffKey,
+    ai: DIFF[humans.length ? 'normal' : (DIFF[diffKey] ? diffKey : 'normal')], diffKey: humans.length ? 'normal' : (DIFF[diffKey] ? diffKey : 'normal'),
   };
   t.players.push(makePlayer(t, 0, 'captain'));
   for (let i = 1; i <= 3; i++) t.players.push(makePlayer(t, i, 'sidekick'));
@@ -249,7 +258,7 @@ function simulate(dt, frozenPlay = false) {
     const cands = t.players.filter(p => isUp(p) && !p.human);
     cands.sort((p, q) => dist(p.x, p.y, b.x, b.y) - dist(q.x, q.y, b.x, b.y));
     const oppHas = b.owner && b.owner.team !== t;
-    t.chasers = cands.slice(0, oppHas && !t.humans.length ? 2 : 1);
+    t.chasers = cands.slice(0, oppHas && !t.humans.length ? (t.ai.chasers || 2) : 1);
     if (!frozenPlay) updateHumans(t, dt);
   }
   // commands
@@ -793,7 +802,7 @@ function contactInteractions(dt) {
       const ballNear = hadBall || dist(v.x, v.y, b.x, b.y) < nearDist || (C4.enabled && b.passTarget === v);
       const force = p.tacklePerfect ? MECH.charge.tacklePerfectForce : 1;
       const downFor = MECH.immobilize.enabled ? MECH.immobilize.duration : 0.9 + 0.35 * p.tackleP * (v.fx.shrink > 0 ? 1.5 : 1); // 3. immobilize
-      knock(v, p.vx * 0.75 * force, p.vy * 0.75 * force, downFor, 'tackle');
+      knock(v, p.vx * 0.75 * force, p.vy * 0.75 * force, downFor * (v.human && !p.human ? p.team.ai.knock || 1 : 1), 'tackle');
       p.stats.tackles++;
       if (Math.random() < 0.3) { const w = pick(VOICE_LINES.taunt); VOX.say(p, w, 'taunt', 0.35); if (!p.bubble) bubble(p, w); }
       if (p.human) Input.rumble(p.human, 120, 0.6, 0.6);
@@ -829,7 +838,7 @@ function contactInteractions(dt) {
       for (const s of other(o.team).players) {
         if (!canAct(s) || s.fx.shrink > 0) continue;
         const d = dist(s.x, s.y, b.x, b.y);
-        if (d < s.r + BALL_R + 3 && Math.random() < dt * 2.2 * (o.fx.shrink > 0 ? 3 : 1)) {
+        if (d < s.r + BALL_R + 3 && Math.random() < dt * 2.2 * (o.fx.shrink > 0 ? 3 : 1) * (s.human ? 1 : s.team.ai.steal || 1)) {
           b.owner = s; b.lastTouch = s; b.pickupInv = 0.45; s.invuln = 0.2;
           floatText(o.x, o.y, 70, 'YOINK!', '#fff', 24); SFX.pass();
           break;
@@ -1267,7 +1276,7 @@ function aiCmd(p, dt) {
     if (superMood || dg < range || (dg < 760 && Math.random() < dt * 0.5)) {
       cmd.shootPressed = cmd.shootDown = true;
       p.ai.wantSuper = superMood || (inSuperRange(p) && th.d > 110 && Math.random() < 0.6);
-      p.ai.chargeTarget = th.d < 130 ? rand(0.25, 0.5) : rand(0.55, 1);
+      p.ai.chargeTarget = (th.d < 130 ? rand(0.25, 0.5) : rand(0.55, 1)) * (D.power || 1);
       p.ai.sweetRelease = 0.5 + rand(-1, 1) * 0.2 * (1.25 - D.superAcc);
       const k = other(T).keeper;
       p.ai.aimY = (k.y > FH / 2 ? -1 : 1) * rand(0.45, 0.95) * (Math.random() < 0.25 ? -1 : 1);
