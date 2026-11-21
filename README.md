@@ -54,6 +54,10 @@ Other keys:
 - `N`: mute.
 - `M`: music on or off.
 
+**Pause menu → 🎮 CONTROLS:** shows the controls for every keyboard and controller in the game, with a tab per device. Pick an action and press the new key or button to change it. If that key was already in use, the two actions swap. Each tab has **Reset to default**. Keyboard layouts are saved in the browser; controller layouts are saved per controller, and the stick and D-pad keep working after a button change. `Esc`, `P`, `N`, `M`, `Tab`, `Backspace` and `Enter` stay reserved for menus.
+
+**Pause menu → ❓ HOW TO PLAY:** every special move (perfect shots, super strikes, one-timers, power tackles, jukes, dodges, powers, items, the hyper strike) written with *your* buttons, plus your captain's signature and squad powers.
+
 ### Mouse
 
 You can click everything in the menus: buttons, captains, stadiums and option arrows.
@@ -223,12 +227,20 @@ These all sit on top of each stadium's own hazards: lightning, power cuts, meteo
 | Sahara Oasis | Sand dunes, on a slow sandy pitch | Camels and goats |
 | Afronaut Launchpad | Force field, with low gravity | Alien abductions |
 
+## Characters
+
+**👥 CHARACTERS** on the title screen shows every captain: country, team, backstory, stats, super strike, signature and squad powers, squad names and catchphrases.
+
+**💡 Suggest a character:** a form for a new captain (name and country, plus nickname, team, backstory, power idea, super strike name, catchphrase, look, kit colour and skin tone). Saved suggestions appear in the gallery with their own blocky portrait. **Send** opens a pre-filled GitHub issue on this repository (needs a free GitHub account); **Copy** puts the text on the clipboard instead.
+
+---
+
 ## Match Rules
 
 | Option | Choices |
 |---|---|
 | Match length | 1, 2, 3 or 5 minutes |
-| CPU difficulty | Five levels: **1 Plain Pap** (training: the CPU is slow, almost never tackles, rarely steals and its keeper lets plenty in), **2 Gentle** (the default), **3 Pepper**, **4 Scotch Bonnet**, **5 Peri-Peri** (no mercy) |
+| CPU difficulty | Five levels: **1 Plain Pap** (training: the CPU is slow, almost never tackles, rarely steals and its keeper lets plenty in), **2 Gentle** (the default), **3 Pepper**, **4 Scotch Bonnet**, **5 Peri-Peri** (no mercy). A card beside the list shows the CPU's speed, shooting, tackling, keeper, pressing and brains for the chosen level |
 | Power-ups | On / off |
 | Stadium hazards | On / off |
 | Golden goal on a draw | On / off |
@@ -249,6 +261,28 @@ These all sit on top of each stadium's own hazards: lightning, power cuts, meteo
 ---
 
 ## Tuning and testing the mechanics
+
+**CPU difficulty** lives in the `DIFF` table at the top of `js/game.js`. Every factor steps up at every level:
+
+| Factor | 1 Plain Pap | 2 Gentle | 3 Pepper | 4 Scotch Bonnet | 5 Peri-Peri |
+|---|---|---|---|---|---|
+| Run speed | 0.74 | 0.86 | 1.0 | 1.06 | 1.12 |
+| Shot accuracy | 0.3 | 0.5 | 0.75 | 0.9 | 1.0 |
+| Shot power | 0.62 | 0.78 | 0.92 | 1.0 | 1.08 |
+| Shooting range | 0.62 | 0.76 | 0.9 | 1.0 | 1.12 |
+| Corner aim | 0.35 | 0.55 | 0.75 | 0.9 | 1.0 |
+| Keeper reaction (s) | 0.6 | 0.38 | 0.2 | 0.11 | 0.06 |
+| Keeper saves | 0.38 | 0.6 | 0.9 | 1.05 | 1.18 |
+| Tackle rate | 0.07 | 0.22 | 0.32 | 0.52 | 0.8 |
+| Steal rate | 0.08 | 0.3 | 0.6 | 0.9 | 1.2 |
+| Your knockdown time | 0.5 | 0.65 | 0.8 | 0.9 | 1.0 |
+| Players pressing you | 1.0 | 1.4 | 1.8 | 2.2 | 2.6 |
+| Decision time | 1.8 | 1.4 | 1.0 | 0.85 | 0.7 |
+| Passing under pressure | 0.2 | 0.35 | 0.5 | 0.65 | 0.8 |
+| Dodge rate | 0.04 | 0.12 | 0.24 | 0.34 | 0.45 |
+| Super-strike timing | 0.2 | 0.38 | 0.6 | 0.8 | 0.95 |
+| Item and power use | 0.15 | 0.4 | 0.85 | 1.25 | 1.7 |
+| Marking radius | 120 | 200 | 300 | 380 | 460 |
 
 Eight systems can each be switched off. All their numbers and on/off flags live in **`js/config.js`**:
 
@@ -291,10 +325,11 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`, `chaos`, `ke
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
 | `js/audio.js` | WebAudio sound effects (body hits, net, glove catches, post clangs, crowd), vuvuzelas and the amapiano music sequencer (log-drum bass, swung shakers, Rhodes chords, pad, flute lead) |
 | `js/voice.js` | Player voices: a formant speech synth that sings the speech-bubble words with tonal melodies, rolled R's and ululation, plus optional African-English text-to-speech |
-| `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, rumble |
+| `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, per-action key and button remapping, rumble |
 | `js/creatures.js` | Blocky Roblox-style animals (elephant, giraffe, zebra, camel, goat, penguin, wildebeest) and pitch NPCs, built from the same 3D blocks as the players |
 | `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |
 | `js/game.js` | Match simulation: physics, AI, keepers, tackles, dodges, shots, super and hyper strikes, powers, items, hazards, gear |
 | `js/chaos.js` | Animal behaviours and the random obstacle and helper events, tied into power-ups |
 | `js/render.js` | Perspective camera, stadiums, crowd, pitch, entities, effects, meters and HUD |
-| `js/main.js` | Clickable menus, controller setup and remap wizard, pause, results, and the main loop |
+| `js/main.js` | Clickable menus, controller setup and remap wizard, pause (controls remapping and How to Play), results, and the main loop |
+| `js/characters.js` | The Characters gallery and the suggest-a-character form |

@@ -9,20 +9,25 @@ const GRAV = 1150;
 const CHARGE_TIME = 0.32, SWEET_TIME = 0.6;
 const FORM = [{ x: 0.58, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.4, y: 0.8 }, { x: 0.22, y: 0.5 }];
 const HUMAN_COLORS = ['#ff4d4d', '#4dabf7', '#ffd43b', '#51cf66', '#f783ac', '#ffa94d', '#b197fc'];
-// CPU difficulty, level 1 (training) to 5. Applies to CPU-only teams.
-//  react: keeper reaction delay (s) | acc: shooting/decision accuracy | tackle: how often the CPU tackles
-//  steal: body-contact steal rate | keeper: save-chance multiplier | speed: run speed | item: item/ability use
-//  power: CPU shot power | chasers: CPU players pressing your ball carrier | knock: how long CPU tackles keep you down
+// CPU difficulty, level 1 (training) to 5. Applies to CPU-only teams. Every factor steps up at every level.
 const DIFF = {
-  rookie: { react: 0.6,  acc: 0.3,  tackle: 0.07, steal: 0.08, keeper: 0.38, superAcc: 0.2,  speed: 0.74, item: 0.15, power: 0.65, chasers: 1, knock: 0.5 },
-  easy:   { react: 0.38, acc: 0.5,  tackle: 0.22, steal: 0.3,  keeper: 0.6,  superAcc: 0.35, speed: 0.86, item: 0.4,  power: 0.8,  chasers: 1, knock: 0.7 },
-  normal: { react: 0.18, acc: 0.78, tackle: 0.5,  steal: 0.7,  keeper: 0.92, superAcc: 0.62, speed: 1.0,  item: 1,    power: 1,    chasers: 2, knock: 0.9 },
-  hard:   { react: 0.1,  acc: 0.92, tackle: 0.85, steal: 1,    keeper: 1.08, superAcc: 0.85, speed: 1.05, item: 1.4,  power: 1,    chasers: 2, knock: 1 },
-  insane: { react: 0.06, acc: 1,    tackle: 1.25, steal: 1.25, keeper: 1.18, superAcc: 0.95, speed: 1.1,  item: 1.7,  power: 1.05, chasers: 2, knock: 1 },
+  //        run    shot   shot   shoot  corner keeper keeper tackle steal  you-  press  think  pass   dodge  super  items  mark
+  //        speed  accur. power  range  aim    react  saves  rate   rate   down   (n)    time   smart  rate   timing        radius
+  rookie: { speed: 0.74, acc: 0.3,  power: 0.62, shootRange: 0.62, aim: 0.35, react: 0.6,  keeper: 0.38, tackle: 0.07, steal: 0.08, knock: 0.5,  chasers: 1.0, think: 1.8, pass: 0.2,  dodge: 0.04, superAcc: 0.2,  item: 0.15, mark: 120 },
+  easy:   { speed: 0.86, acc: 0.5,  power: 0.78, shootRange: 0.76, aim: 0.55, react: 0.38, keeper: 0.6,  tackle: 0.22, steal: 0.3,  knock: 0.65, chasers: 1.4, think: 1.4, pass: 0.35, dodge: 0.12, superAcc: 0.38, item: 0.4,  mark: 200 },
+  normal: { speed: 1.0,  acc: 0.75, power: 0.92, shootRange: 0.9,  aim: 0.75, react: 0.2,  keeper: 0.9,  tackle: 0.32, steal: 0.6,  knock: 0.8,  chasers: 1.8, think: 1.0, pass: 0.5,  dodge: 0.24, superAcc: 0.6,  item: 0.85, mark: 300 },
+  hard:   { speed: 1.06, acc: 0.9,  power: 1.0,  shootRange: 1.0,  aim: 0.9,  react: 0.11, keeper: 1.05, tackle: 0.52, steal: 0.9,  knock: 0.9,  chasers: 2.2, think: 0.85, pass: 0.65, dodge: 0.34, superAcc: 0.8,  item: 1.25, mark: 380 },
+  insane: { speed: 1.12, acc: 1.0,  power: 1.08, shootRange: 1.12, aim: 1.0,  react: 0.06, keeper: 1.18, tackle: 0.8,  steal: 1.2,  knock: 1.0,  chasers: 2.6, think: 0.7, pass: 0.8,  dodge: 0.45, superAcc: 0.95, item: 1.7,  mark: 460 },
 };
+// what the difficulty card in Match Rules shows (0..1 bars, from the CPU's point of view)
+const DIFF_BARS = [
+  ['SPEED', d => (d.speed - 0.7) / 0.42], ['SHOOTING', d => (d.acc + d.power + d.shootRange + d.aim - 1.6) / 2.6],
+  ['TACKLING', d => (d.tackle + d.steal) / 2], ['KEEPER', d => (d.keeper / 1.18 + (0.66 - d.react) / 0.6) / 2],
+  ['PRESSING', d => (d.chasers - 0.8) / 1.8], ['BRAINS', d => (d.pass + 1.9 - d.think + d.dodge + d.superAcc) / 3.5],
+];
 const DIFF_KEYS = ['rookie', 'easy', 'normal', 'hard', 'insane'];
 const DIFF_NAMES = { rookie: '1 · PLAIN PAP', easy: '2 · GENTLE', normal: '3 · PEPPER', hard: '4 · SCOTCH BONNET', insane: '5 · PERI-PERI' };
-const DIFF_HINTS = { rookie: 'Training: CPU barely tackles', easy: 'Relaxed: rare tackles', normal: 'A fair fight', hard: 'Tough tackling CPU', insane: 'No mercy' };
+const DIFF_HINTS = { rookie: 'Training: slow CPU that barely tackles', easy: 'Relaxed: rare tackles, soft keeper', normal: 'A fair fight', hard: 'Sharp, tackle-happy CPU', insane: 'No mercy' };
 const SAVE_P = { boulder: 0.22, zigzag: 0.25, split: 0.2, sky: 0.18, teleport: 0.14, curve: 0.25, dance: 0.05, cannon: 0.26 };
 const SUPER_STYLE = { hyperArc: 'fire', boulder: 'bus', zigzag: 'electric', split: 'jollof', sky: 'fire', teleport: 'quantum', curve: 'steam', dance: 'disco', cannon: 'cannon' };
 const SUPER_SIZE = { hyperArc: 1.7, boulder: 2.6, split: 1.3, cannon: 1.5, dance: 1.35, sky: 1.3 };
@@ -258,7 +263,9 @@ function simulate(dt, frozenPlay = false) {
     const cands = t.players.filter(p => isUp(p) && !p.human);
     cands.sort((p, q) => dist(p.x, p.y, b.x, b.y) - dist(q.x, q.y, b.x, b.y));
     const oppHas = b.owner && b.owner.team !== t;
-    t.chasers = cands.slice(0, oppHas && !t.humans.length ? (t.ai.chasers || 2) : 1);
+    let nCh = 1;
+    if (oppHas && !t.humans.length) { const ch = t.ai.chasers || 2; nCh = Math.floor(ch); const extra = cands[nCh]; if (extra && dist(extra.x, extra.y, b.x, b.y) < (ch - nCh) * 600) nCh++; }
+    t.chasers = cands.slice(0, nCh);
     if (!frozenPlay) updateHumans(t, dt);
   }
   // commands
@@ -1257,7 +1264,7 @@ function aiCmd(p, dt) {
     if (aiWantsAbility(p) && Math.random() < 0.55 * D.item) { cmd.ability = true; }
   }
 
-  if (MECH.dodge.enabled && p.dodgeCD <= 0 && tacklerThreat(p) && Math.random() < 0.3 * D.acc) cmd.dodge = true;
+  if (MECH.dodge.enabled && p.dodgeCD <= 0 && tacklerThreat(p) && Math.random() < (D.dodge ?? 0.3 * D.acc)) cmd.dodge = true;
   if (b.owner === p) {
     const dg = dist(p.x, p.y, gx, gy);
     const th = nearestOpp(p);
@@ -1271,21 +1278,21 @@ function aiCmd(p, dt) {
       cmd.aimY = p.ai.aimY;
       return cmd;
     }
-    const range = p.role === 'captain' ? 600 : 520;
+    const range = (p.role === 'captain' ? 600 : 520) * (D.shootRange || 1);
     const superMood = p.role === 'captain' && inSuperRange(p) && th.d > 170 && Math.random() < dt * 1.5;
-    if (superMood || dg < range || (dg < 760 && Math.random() < dt * 0.5)) {
+    if (superMood || dg < range || (dg < 760 * (D.shootRange || 1) && Math.random() < dt * 0.5)) {
       cmd.shootPressed = cmd.shootDown = true;
       p.ai.wantSuper = superMood || (inSuperRange(p) && th.d > 110 && Math.random() < 0.6);
       p.ai.chargeTarget = (th.d < 130 ? rand(0.25, 0.5) : rand(0.55, 1)) * (D.power || 1);
       p.ai.sweetRelease = 0.5 + rand(-1, 1) * 0.2 * (1.25 - D.superAcc);
       const k = other(T).keeper;
-      p.ai.aimY = (k.y > FH / 2 ? -1 : 1) * rand(0.45, 0.95) * (Math.random() < 0.25 ? -1 : 1);
+      p.ai.aimY = (k.y > FH / 2 ? -1 : 1) * rand(0.45, 0.95) * (D.aim || 1) * (Math.random() < 0.25 ? -1 : 1);
       cmd.aimY = p.ai.aimY;
       return cmd;
     }
     if (p.ai.t <= 0) {
-      p.ai.t = rand(0.22, 0.45) * (1.3 - D.acc * 0.4);
-      if (th.d < 115 && Math.random() < 0.5) { const m = bestPassTarget(p); if (m) { cmd.pass = true; cmd.passTo = m; return cmd; } }
+      p.ai.t = rand(0.22, 0.45) * (D.think || 1);
+      if (th.d < 115 && Math.random() < (D.pass ?? 0.5)) { const m = bestPassTarget(p); if (m) { cmd.pass = true; cmd.passTo = m; return cmd; } }
       if (th.d < 85 && p.jukeCD <= 0 && Math.random() < 0.35 * D.acc) { cmd.tackle = true; const a = p.face + rand(-1, 1); cmd.mx = Math.cos(a); cmd.my = Math.sin(a); return cmd; }
       if (Math.random() < 0.08) { const m = bestPassTarget(p); if (m && (m.x - p.x) * T.dir > 150) { cmd.pass = true; cmd.passTo = m; return cmd; } }
       p.ai.weave = clamp(p.ai.weave + rand(-0.6, 0.6), -1, 1);
@@ -1328,7 +1335,7 @@ function aiCmd(p, dt) {
       seek(cmd, p, tx + o.vx * 0.15, ty + o.vy * 0.15, 10);
       const dd = dist(p.x, p.y, o.x, o.y);
       if (dd < 85 + p.r && p.tackleCD <= 0 && p.ai.t <= 0) {
-        p.ai.t = rand(0.15, 0.35) / D.tackle;
+        p.ai.t = rand(0.15, 0.35) / D.tackle * (D.think || 1);
         if (Math.random() < 0.55 * D.tackle) { cmd.tackle = true; cmd.faceTo = { x: o.x + o.vx * 0.12, y: o.y + o.vy * 0.12 }; }
       }
     } else if (o && o.role === 'keeper') {
@@ -1344,7 +1351,7 @@ function aiCmd(p, dt) {
   if (b.owner && b.owner.team !== T) {
     let mark = null, md = 1e9;
     for (const o of other(T).players) { if (o === b.owner || !isUp(o)) continue; const d = dist(o.x, o.y, f.x, f.y); if (d < md) { md = d; mark = o; } }
-    if (mark && md < 300) { const og = ownGoalX(T); tx = lerp(mark.x, og, 0.15); ty = lerp(mark.y, FH / 2, 0.15); }
+    if (mark && md < (D.mark || 300)) { const og = ownGoalX(T); tx = lerp(mark.x, og, 0.15); ty = lerp(mark.y, FH / 2, 0.15); }
   }
   seek(cmd, p, tx, ty, 80);
   return cmd;
