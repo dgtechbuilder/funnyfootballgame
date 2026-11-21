@@ -35,7 +35,7 @@ function makePlayer(team, slot, role) {
     state: 'normal', stateT: 0, anim: rand(0, 10), moving: 0, lyingDir: 1,
     charging: false, charge: 0, sweetT: -1,
     tackleCD: 0, jukeCD: 0, invuln: 0, oneTimer: 0, kickAnim: 0, wallCD: 0,
-    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0 },
+    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0 },
     dodgeCD: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
     abilityCD: rand(2, 5), antic: null, anticCD: rand(4, 9), stretch: 0, stretchCD: rand(5, 10),
     bubble: null, expr: 'normal', exprT: 0, celebrate: false,
@@ -113,7 +113,10 @@ function resetKickoff(teamIdx) {
   b.owner = null;
   for (const h of M.teams[0].humans.concat(M.teams[1].humans)) h.player = null;
   M.phase = 'intro'; M.phaseT = 0; M.slowmo = 1;
-  M.hazards = M.hazards.filter(h => h.type === 'animal' || h.type === 'banana');
+  M.hazards = M.hazards.filter(h => h.type === 'banana');
+  b.carried = null;
+  if (M.chaos) { M.chaos.events = M.chaos.events.filter(e => e.type !== 'invader'); M.chaos.spits = []; }
+  for (const t of M.teams) { t.kReceiver = null; t.kSpot = null; }
   M.blackout = 0;
   M.projectiles = [];
 }
@@ -268,6 +271,7 @@ function simulate(dt, frozenPlay = false) {
   }
   updateProjectiles(dt, frozenPlay);
   updateHazards(dt, frozenPlay);
+  updateChaos(dt, frozenPlay); // walking animals + random obstacles/helpers (js/chaos.js)
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +298,15 @@ function updateHumans(t, dt) {
       else continue;
     }
     const teamHas = b.owner && b.owner.team === t && b.owner.role !== 'keeper';
-    if (teamHas && b.owner !== p && !b.owner.human) {
+    const keeperHolds = b.owner === t.keeper;
+    if (keeperHolds && MECH.keeperPass.enabled && t.kReceiver && !t.kReceiver.human && t.humans[0] === h && p !== t.kReceiver && isUp(t.kReceiver)) {
+      switchTo(h, t.kReceiver); h.cd = 0.8; // control the teammate making the run to midfield
+    } else if (teamHas && b.owner !== p && !b.owner.human) {
       // give the ball-carrier to the human closest to it
       let best = null, bd = 1e9;
       for (const hh of t.humans) { if (!hh.player) continue; const d = dist(hh.player.x, hh.player.y, b.owner.x, b.owner.y); if (d < bd) { bd = d; best = hh; } }
       if (best === h) switchTo(h, b.owner);
-    } else if (!teamHas && h.cd <= 0 && b.owner !== p && !p.charging) {
+    } else if (!teamHas && !keeperHolds && h.cd <= 0 && b.owner !== p && !p.charging) {
       const tgt = b.passTarget && b.passTarget.team === t ? b.passTarget : null;
       if (tgt && !tgt.human) { switchTo(h, tgt); h.cd = 0.5; }
       else {
@@ -484,6 +491,7 @@ function moveP(p, mx, my, dt, mul) {
   if (p.fx.fire > 0) max *= 1.45;
   if (p.fx.wind > 0) max *= 1.6;
   if (p.fx.boost > 0) max *= MECH.dodge.boostMult;
+  if (p.fx.mud > 0) max *= MECH.chaos.puddle.slow; // mud puddle
   if (p.fx.shrink > 0) max *= 0.75;
   if (p.fx.mega > 0) max *= 1.05;
   if (owner) max *= 0.93;
@@ -814,7 +822,7 @@ function contactInteractions(dt) {
   }
 
   // free-ball pickups
-  if (!b.owner && !b.super && b.z < 42) {
+  if (!b.owner && !b.super && !b.carried && b.z < 42) {
     let best = null, bd = 1e9;
     for (const p of M.outfield) {
       if (!(canAct(p) || p.state === 'tackle')) continue;
@@ -998,8 +1006,10 @@ function updateKeeper(k, dt, frozenPlay) {
   }
   if (k.state === 'hold') {
     k.stateT -= dt; k.vx *= 0.8; k.vy *= 0.8;
-    if (b.owner !== k) { k.state = 'normal'; return; }
-    if (k.stateT <= 0 && !frozenPlay) {
+    if (b.owner !== k) { k.state = 'normal'; k.inHold = false; T.kReceiver = null; T.kSpot = null; return; }
+    if (frozenPlay) return;
+    if (MECH.keeperPass.enabled) { keeperDistribute(k, dt); return; }
+    if (k.stateT <= 0) {
       k.state = 'normal';
       let best = null, bs = -1e9;
       for (const m of T.players) {
@@ -1070,6 +1080,42 @@ function updateKeeper(k, dt, frozenPlay) {
   if (Math.hypot(k.vx, k.vy) > 20) k.face = Math.atan2(b.y - k.y, b.x - k.x);
   keeperContact(k);
 }
+// ---- 8. keeper distribution: wait for a teammate to get open around midfield, then pass to them
+function keeperOptions(k) {
+  const T = k.team, KP = MECH.keeperPass, opp = other(T).players.filter(isUp);
+  return T.players.filter(isUp).map(m => {
+    const frac = T.dir > 0 ? m.x / FW : 1 - m.x / FW;
+    let near = 1e9; for (const o of opp) near = Math.min(near, dist(o.x, o.y, m.x, m.y));
+    const dx = m.x - k.x, dy = m.y - k.y, L = Math.hypot(dx, dy) || 1;
+    const laneBlocked = opp.some(o => { const t = clamp(((o.x - k.x) * dx + (o.y - k.y) * dy) / (L * L), 0, 1); return t > 0.1 && t < 0.9 && dist(o.x, o.y, k.x + dx * t, k.y + dy * t) < 45; });
+    const inBand = frac >= KP.bandStart && frac <= KP.bandEnd, open = near > KP.openRadius;
+    const mid = (KP.bandStart + KP.bandEnd) / 2;
+    return { m, inBand, open, laneBlocked, score: (inBand ? 300 : 0) + Math.min(near, 300) - Math.abs(frac - mid) * 400 - (laneBlocked ? 120 : 0) };
+  });
+}
+function keeperDistribute(k, dt) {
+  const T = k.team, KP = MECH.keeperPass, b = M.ball;
+  if (!k.inHold) {
+    k.inHold = true; k.holdT = 0;
+    // send the best-placed teammate to an open spot in midfield
+    const mid = (KP.bandStart + KP.bandEnd) / 2, sx = T.dir > 0 ? mid * FW : (1 - mid) * FW;
+    const lanes = [FH * 0.22, FH * 0.5, FH * 0.78].map(y => ({ y, near: Math.min(...other(T).players.filter(isUp).map(o => dist(o.x, o.y, sx, y)), 1e9) }));
+    lanes.sort((a, q) => q.near - a.near);
+    T.kSpot = { x: sx, y: lanes[0].y };
+    const cand = T.players.filter(isUp).sort((a, q) => dist(a.x, a.y, sx, T.kSpot.y) - dist(q.x, q.y, sx, T.kSpot.y));
+    T.kReceiver = cand[0] || null;
+  }
+  k.holdT += dt;
+  const opts = keeperOptions(k);
+  const ready = opts.filter(o => o.inBand && o.open).sort((a, q) => q.score - a.score)[0];
+  if ((ready && k.holdT >= KP.minHold) || k.holdT >= KP.maxHold) {
+    const target = ready ? ready.m : (opts.sort((a, q) => q.score - a.score)[0] || {}).m;
+    k.state = 'normal'; k.inHold = false; T.kReceiver = null; T.kSpot = null;
+    if (target) { k.face = Math.atan2(target.y - k.y, target.x - k.x); pass(k, { mx: 0, my: 0, passTo: target }); floatText(k.x, k.y, 90, 'TO FEET!', '#a5ffd6', 18, 0.7); }
+    else { releaseBall(k); b.vx = T.dir * 800; b.vz = 300; }
+    b.lockP = k; b.lockT = 0.6;
+  }
+}
 function moveToward(p, tx, ty, dt, spd) {
   const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
   const s = d < 4 ? 0 : Math.min(spd, d * 6);
@@ -1078,7 +1124,7 @@ function moveToward(p, tx, ty, dt, spd) {
 }
 function keeperContact(k) {
   const b = M.ball, T = k.team;
-  if (b.super) return;
+  if (b.super || b.carried) return;
   const reach = k.r + (k.state === 'dive' ? 28 : 12) + (k.stretch > 0 ? 80 : 0);
   if (b.z > BAR_Z + 15) return;
   const d = dist(k.x, k.y, b.x, b.y);
@@ -1229,6 +1275,7 @@ function aiCmd(p, dt) {
 
   const teamHas = b.owner && b.owner.team === T;
   if (teamHas) {
+    if (b.owner === T.keeper && T.kReceiver === p && T.kSpot) { seek(cmd, p, T.kSpot.x, T.kSpot.y, 60); return cmd; } // get open for the keeper
     const f = formationPos(p, true);
     seek(cmd, p, f.x, f.y, 80);
     return cmd;
@@ -1627,8 +1674,8 @@ const POWERS = {
   },
   juma(p) { // stampede
     const T = p.team, dir = T.dir, x0 = clamp(p.x - dir * 450, -150, FW + 150);
-    for (let i = 0; i < 4; i++) M.hazards.push({ type: 'stampede', team: T, emoji: pick(['🦓', '🐃', '🦓', '🦬']), x: x0 - dir * i * 70, y: clamp(p.y + rand(-260, 260), 40, FH - 40), vx: dir * rand(650, 780), ph: rand(0, TAU), hit: [], t: 0 });
-    SFX.thud(); SFX.animal('🦓'); shake(10); bubble(p, 'TWENDE!');
+    for (let i = 0; i < 4; i++) M.hazards.push({ type: 'stampede', team: T, kind: pick(['zebra', 'wildebeest', 'zebra', 'wildebeest']), x: x0 - dir * i * 70, y: clamp(p.y + rand(-260, 260), 40, FH - 40), vx: dir * rand(650, 780), ph: rand(0, TAU), hit: [], t: 0 });
+    SFX.thud(); SFX.animal('zebra'); shake(10); bubble(p, 'TWENDE!');
   },
 };
 const SQUADS = {
@@ -1940,41 +1987,6 @@ function updateHazards(dt, frozenPlay) {
         }
         break;
       }
-      case 'penguin': {
-        h.x += h.vx * dt; h.y += h.vy * dt;
-        if (h.y < -80 || h.y > FH + 80) dead = true;
-        if (!frozenPlay) for (const p of M.all) {
-          if (!isUp(p) || p.z > 30 || p.state === 'spin') continue;
-          if (dist(p.x, p.y, h.x, h.y) < p.r + 18) {
-            if (b.owner === p) { b.owner = null; b.lockP = p; b.lockT = 0.5; b.vz = 150; }
-            p.state = 'spin'; p.stateT = 1.1; p.vx = h.vx * 0.9 + rand(-100, 100); p.vy = h.vy * 0.9; p.expr = 'panic';
-            bubble(p, pick(['PENGUIN\'D!', 'NOOT NOOT?!', 'SLIPPERY!'])); SFX.penguin();
-          }
-        }
-        if (!b.owner && !b.super && b.z < 30 && dist(b.x, b.y, h.x, h.y) < BALL_R + 18) { b.vx = h.vx * 1.4 + rand(-200, 200); b.vy = h.vy * 1.4; b.vz = 180; SFX.penguin(); }
-        break;
-      }
-      case 'animal': {
-        // states: enter -> graze -> leave
-        if (h.phase === 'enter') { const d = seekPt(h, h.tx, h.ty, 70, dt); if (d < 8) { h.phase = 'graze'; h.gt = rand(9, 14); } }
-        else if (h.phase === 'graze') { h.gt -= dt; if (Math.random() < dt * 0.25) { SFX.animal(h.emoji); floatText(h.x, h.y, 90, animalWord(h.emoji), '#fff', 24); } if (h.gt <= 0) { h.phase = 'leave'; h.tx = h.x; h.ty = h.y < FH / 2 ? -120 : FH + 120; } }
-        else { seekPt(h, h.tx, h.ty, 90, dt); if (h.y < -100 || h.y > FH + 100) dead = true; }
-        // obstacle
-        for (const p of M.all) {
-          if (p.state === 'abducted' || p.z > 40) continue;
-          const d = dist(p.x, p.y, h.x, h.y), m = p.r + h.r;
-          if (d < m && d > 0) { const nx = (p.x - h.x) / d, ny = (p.y - h.y) / d; p.x = h.x + nx * m; p.y = h.y + ny * m; if (p.state === 'down' && Math.hypot(p.vx, p.vy) > 250) { p.vx = nx * 300; p.vy = ny * 300; SFX.animal(h.emoji); } }
-        }
-        if (!b.owner && !b.super && b.z < 60) {
-          const d = dist(b.x, b.y, h.x, h.y), m = BALL_R + h.r;
-          if (d < m && d > 0) {
-            const nx = (b.x - h.x) / d, ny = (b.y - h.y) / d, vn = b.vx * nx + b.vy * ny;
-            b.x = h.x + nx * m; b.y = h.y + ny * m;
-            if (vn < 0) { b.vx -= 1.8 * vn * nx; b.vy -= 1.8 * vn * ny; if (-vn > 400) { SFX.animal(h.emoji); floatText(h.x, h.y, 100, animalWord(h.emoji), '#fff', 28); b.shot = null; } }
-          }
-        }
-        break;
-      }
       case 'ufo': updateUfo(h, dt); if (h.phase === 'gone') dead = true; break;
       case 'stampede': {
         h.x += h.vx * dt; h.y += Math.sin(h.t * 6 + h.ph) * 30 * dt;
@@ -1991,8 +2003,6 @@ function updateHazards(dt, frozenPlay) {
     if (dead) M.hazards.splice(i, 1);
   }
 }
-const ANIMAL_R = { '🐘': 54, '🦒': 36, '🦓': 32, '🐪': 42, '🐫': 42 };
-function animalWord(e) { return { '🐘': 'PAWOOOO!', '🦒': 'HMPH.', '🦓': 'NEIGH!', '🐪': 'HRRMPH!', '🐫': 'GRRUMPH!' }[e] || 'MOO!'; }
 function seekPt(h, tx, ty, spd, dt) {
   const dx = tx - h.x, dy = ty - h.y, d = Math.hypot(dx, dy);
   if (d > 1) { h.x += dx / d * Math.min(spd * dt, d); h.y += dy / d * Math.min(spd * dt, d); h.flip = dx < 0; }
@@ -2013,16 +2023,9 @@ function spawnHazard(kind) {
     }
     say(COMMENTARY.hazard[kind], {}, 1);
   } else if (kind === 'penguin') {
-    const n = randi(2, 5), fromTop = Math.random() < 0.5, x0 = rand(250, FW - 250);
-    for (let i = 0; i < n; i++) M.hazards.push({ type: 'penguin', x: x0 + i * rand(40, 70) - n * 25, y: fromTop ? -40 - i * 50 : FH + 40 + i * 50, vx: rand(-40, 40), vy: (fromTop ? 1 : -1) * rand(420, 520) });
-    SFX.penguin(); say(COMMENTARY.hazard.penguin, {}, 1);
+    spawnPenguins();
   } else if (kind === 'animals') {
-    if (M.hazards.filter(h => h.type === 'animal').length >= 2) return;
-    const fromTop = Math.random() < 0.5;
-    const tx = rand(350, FW - 350), ty = rand(220, FH - 220);
-    const emoji = pick(M.stadium.animals || ['🐘']);
-    M.hazards.push({ type: 'animal', emoji, r: ANIMAL_R[emoji] || 38, x: tx + rand(-200, 200), y: fromTop ? -80 : FH + 80, tx, ty, phase: 'enter', flip: false });
-    SFX.animal(emoji); say(COMMENTARY.hazard.animals, {}, 1);
+    spawnCreature(pick(M.stadium.creatures || ['goat']));
   } else if (kind === 'ufo') {
     if (M.hazards.some(h => h.type === 'ufo')) return;
     const cands = M.outfield.filter(p => isUp(p) && p.state !== 'abducted');
