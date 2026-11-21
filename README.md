@@ -7,7 +7,7 @@ Monate Cup is a chaotic, arcade-style football game for 1–6 players that runs 
 - **Teams:** 4 outfield players plus a goalkeeper, led by larger-than-life captains from across Africa.
 - **View:** a low, side-on broadcast camera.
 - **Characters:** chunky Roblox-style avatars built from shaded 3D blocks that turn to face where they run.
-- **No assets:** everything is drawn and synthesized in code, including the Afrobeats / amapiano soundtrack and the vuvuzelas.
+- **No assets:** everything is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords) and the vuvuzelas.
 - **No build step:** just open the page.
 
 **Play online:** https://dgtechbuilder.github.io/funnyfootballgame/
@@ -287,7 +287,7 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`, `chaos`, `ke
 | `index.html` | Page shell; loads the scripts in order |
 | `js/config.js` | Tunable numbers and on/off flags for the add-on mechanics, gear definitions, `?mech=` URL toggles |
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
-| `js/audio.js` | WebAudio sound effects, vuvuzelas and the Afrobeats / amapiano sequencer |
+| `js/audio.js` | WebAudio sound effects, vuvuzelas and the amapiano music sequencer (log-drum bass, swung shakers, Rhodes chords, pad, flute lead) |
 | `js/input.js` | Keyboard, mouse, touch and gamepads: controller-family detection, player slots, raw button layouts, D-pads that report as one "hat" axis, custom remaps, rumble |
 | `js/creatures.js` | Blocky Roblox-style animals (elephant, giraffe, zebra, camel, goat, penguin, wildebeest) and pitch NPCs, built from the same 3D blocks as the players |
 | `js/draw.js` | Drawing helpers, the ball, and the blocky Roblox-style characters (flat-shaded 3D boxes that turn with the player) |
