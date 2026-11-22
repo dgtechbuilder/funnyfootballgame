@@ -33,6 +33,10 @@ const FanChars = {
   },
 };
 FanChars.load();
+window.addEventListener('online', () => {
+  const n = FanChars.list.filter(f => f.pending).length;
+  if (n && typeof App !== 'undefined' && App.toast) App.toast(`📶 Back online: ${n} character suggestion${n > 1 ? 's' : ''} ready to send (CHARACTERS → SEND)`, '#7CFC00');
+});
 
 Object.assign(App, {
   charItems() { return [...CAPTAINS.map(c => ({ kind: 'cap', c })), ...FanChars.list.slice(-7).map(f => ({ kind: 'fan', f })), { kind: 'add' }]; },
@@ -215,6 +219,12 @@ Object.assign(App, {
     const cv = document.getElementById('game'); if (cv) cv.focus();
   },
   sendSuggestion(f) {
+    if (navigator.onLine === false) { // no signal: keep it, offer it again when the connection is back
+      f.pending = true; FanChars.save();
+      this.toast(`📴 No connection: ${f.name} is saved. We'll remind you to send it when you're back online.`, '#ffd43b');
+      return;
+    }
+    delete f.pending;
     let w = null;
     try { w = window.open(FanChars.issueUrl(f), '_blank'); if (w) w.opener = null; } catch (e) { w = null; }
     f.sent = true; FanChars.save();

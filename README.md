@@ -9,7 +9,8 @@ Monate Cup is a chaotic, arcade-style football game for 1–6 players that runs 
 - **Characters:** chunky Roblox-style avatars built from shaded 3D blocks that turn to face where they run.
 - **No assets:** everything is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords), the vuvuzelas and the players' voices.
 - **Players talk back:** they yelp "EISH!", "CHAI!" and "HAIBO!" when flattened, shout "E DON ENTER!" and ululate after goals, and sulk "WAHALA..." when they lose. Tackles thump, the net swishes and rattles, keeper gloves smack and the crowd goes "OOOH" at the woodwork.
-- **No build step:** just open the page.
+- **No build step to play:** just open the page. The published site is bundled and minified automatically.
+- **Built for slow connections and old phones:** about 175 KB on the first visit, then it **plays fully offline** and adjusts its graphics to the device. See [Slow connections and slow devices](#slow-connections-and-slow-devices).
 
 **Play online:** https://dgtechbuilder.github.io/funnyfootballgame/
 
@@ -31,7 +32,45 @@ Open `index.html` in a modern browser. Double-clicking the file works, and so do
 
 ### Deployment
 
-The game is a static site. Every push to `main` redeploys it to GitHub Pages automatically. If the live site still shows an old version, do a hard refresh (Ctrl+Shift+R, or Cmd+Shift+R on a Mac).
+The game is a static site. Every push to `main` builds it (`npm ci && npm run build`, output in `dist/`) and redeploys it to GitHub Pages automatically. Pull requests run the same build as a check.
+
+Players get new versions on their own: the game downloads an update in the background and uses it the next time it is opened (a toast says when one is ready). A running match is never interrupted.
+
+---
+
+## Slow connections and slow devices
+
+Monate Cup is meant to work for players with a weak or patchy connection and a modest phone, for example in remote areas.
+
+### Loading and offline play
+
+- **One trip for the code:** the build joins the 13 game scripts into one minified file (448 KB of source becomes about 108 KB gzipped). The first visit is about 175 KB in 7 requests, all from the game's own site, with no third-party domains to look up.
+- **Fonts are self-hosted:** no Google Fonts round trips. If they are slow, the game starts with a system font and swaps them in when they arrive.
+- **A loading screen straight away:** it is plain HTML in the page, so it shows before the game script arrives. After 4 seconds it explains the wait, and if the download fails it says so and offers **Try again**.
+- **Plays offline after the first visit:** a service worker (`sw.js`) stores everything the game needs on the device. Later launches start from the device without touching the network, including in airplane mode. The game can also be installed to the home screen (it has a web app manifest).
+- **Safe updates:** each build gets its own version and cache, and an update is only used once every file of it has downloaded. A half-finished download on a dropped connection is never used.
+- **Nothing in play needs the internet:** matches, music and voices are generated on the device. The only online action is sending a character suggestion. When offline, the suggestion is saved, and the game reminds you to send it when the connection is back.
+
+### Adaptive graphics
+
+Almost all of the frame cost is filling pixels, so the game adjusts its resolution first and its decoration second:
+
+| Level | Canvas resolution | What changes |
+|---|---|---|
+| HIGH | up to 2× (sharp on high-DPI screens) | everything |
+| MEDIUM | 1× | everything |
+| LOW | 0.8× | half the crowd (drawn in a few batched fills), no soft grass patches, fewer particles, no glow |
+| LOWEST | 0.6× | a third of the crowd, plain grass, fewest particles |
+
+- **AUTO (the default)** measures the real frame rate. It steps down when the game runs below about 45 fps and steps back up after a stretch of smooth play. If a step down does not help (for example a 30 Hz screen or battery saver), it undoes it and keeps the nicer picture. The level that worked is remembered for the next launch.
+- **Choose it yourself** with the **🖥** button on the title screen and the pause menu (AUTO → HIGH → LOW), or from the URL: `index.html?gfx=low`, `?gfx=high`, `?gfx=auto`.
+- **The game keeps real speed on slow devices:** the simulation runs in fixed steps of at most 50 ms. A device that only draws 12 to 20 frames a second runs two or three steps per frame, so matches don't turn into slow motion and the physics behaves the same as on a fast machine.
+
+### Developing
+
+- `index.html` in the source folder loads the separate scripts, so edits show on reload. When served from `localhost`, the service worker runs in a network-first mode that never serves stale files. Add `?nosw` to the URL to skip it entirely.
+- `npm ci && npm run build` produces `dist/`. Serve that folder (for example `cd dist && python3 -m http.server`) to test the real offline behaviour.
+- A new script file must be added to the scripts block in `index.html`. The build reads the list from there.
 
 ---
 
@@ -322,7 +361,10 @@ Names: `dodge`, `charge`, `immobilize`, `offBall`, `hyper`, `gear`, `chaos`, `ke
 
 | File | What it holds |
 |---|---|
-| `index.html` | Page shell; loads the scripts in order |
+| `index.html` | Page shell, loading screen, self-hosted fonts and service-worker registration; loads the scripts in order |
+| `sw.js` | Service worker: stores the game for offline play and handles updates |
+| `tools/build.mjs` | Build for the published site: one minified, content-hashed script, plus the service worker's file list |
+| `js/perf.js` | Adaptive graphics quality (resolution, crowd, grass, particles), driven by the measured frame rate |
 | `js/config.js` | Tunable numbers and on/off flags for the add-on mechanics, gear definitions, `?mech=` URL toggles |
 | `js/data.js` | Captains, signature and squad powers, stadiums, items, names, keeper antics and commentary |
 | `js/audio.js` | WebAudio sound effects (body hits, net, glove catches, post clangs, crowd), vuvuzelas and the amapiano music sequencer (log-drum bass, swung shakers, Rhodes chords, pad, flute lead) |

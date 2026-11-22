@@ -44,7 +44,13 @@ function renderMatch(c) {
   c.fillStyle = g; c.fillRect(0, 0, VW, VH);
   if (S.night) {
     if (!_stars) _stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random() * 0.5, s: Math.random() * 1.8 + 0.4, p: Math.random() * 6 }));
-    for (const s of _stars) { c.globalAlpha = 0.4 + 0.4 * Math.sin(M.time * 2 + s.p); circle(c, s.x * VW, s.y * VH, s.s, '#fff'); }
+    if (Perf.q.glow) {
+      for (const s of _stars) { c.globalAlpha = 0.4 + 0.4 * Math.sin(M.time * 2 + s.p); circle(c, s.x * VW, s.y * VH, s.s, '#fff'); }
+    } else { // one batched fill, no twinkle
+      c.globalAlpha = 0.6; c.fillStyle = '#fff'; c.beginPath();
+      for (const s of _stars) c.rect(s.x * VW - s.s, s.y * VH - s.s, s.s * 2, s.s * 2);
+      c.fill();
+    }
     c.globalAlpha = 1;
   }
   if (S.id === 'goma') {
@@ -241,6 +247,8 @@ function drawStands(c) {
   drawCrowd(c, false);
 }
 function drawCrowd(c, near) {
+  const step = Perf.q.crowd;
+  if (step > 1) { drawCrowdLite(c, near, step); return; }
   const ex = M.crowdExcite, t = M.time;
   for (const f of M.crowd) {
     if (!!f.near !== near) continue;
@@ -252,6 +260,34 @@ function drawCrowd(c, near) {
     c.fillStyle = f.skin; c.beginPath(); c.arc(x, y - 17 * s, 5 * s, 0, TAU); c.fill();
     if (ex > 0.6) { c.fillRect(x - 8 * s, y - 26 * s, 2.5 * s, 12 * s); c.fillRect(x + 5.5 * s, y - 26 * s, 2.5 * s, 12 * s); }
     if (f.sign) { c.fillStyle = '#fff'; c.fillRect(x - 11 * s, y - 38 * s, 22 * s, 13 * s); c.fillStyle = f.col; c.fillRect(x - 9 * s, y - 35 * s, 18 * s, 3 * s); }
+  }
+}
+
+// Low-quality crowd: every `step`-th fan, a bit bigger, drawn as one batched fill per colour
+// instead of two or three fills per fan. Same layout and bounce, a fraction of the cost.
+const _crowdBatch = new Map();
+function drawCrowdLite(c, near, step) {
+  const ex = M.crowdExcite, t = M.time, arms = ex > 0.6, grow = 1 + (step - 1) * 0.18;
+  for (const v of _crowdBatch.values()) v.length = 0;
+  const add = (col, a) => { let v = _crowdBatch.get(col); if (!v) _crowdBatch.set(col, v = []); v.push(a); };
+  const cr = M.crowd;
+  for (let i = 0; i < cr.length; i += step) {
+    const f = cr[i];
+    if (!!f.near !== near) continue;
+    const jump = Math.max(0, Math.sin(t * 9 + f.ph)) * 7 * ex;
+    const x = PX(f.x, f.y, f.z + jump), y = PY(f.y, f.z + jump);
+    if (x < -20 || x > VW + 20 || y < -20 || y > VH + 20) continue;
+    const s = KZ(f.y) * f.s * grow;
+    add(f.col, [x - 6 * s, y - 12 * s, 12 * s, 12 * s]);
+    add(f.skin, [x - 4.5 * s, y - 21.5 * s, 9 * s, 9 * s]); // square-ish head: the crowd is blocky anyway
+    if (arms) { add(f.skin, [x - 8 * s, y - 26 * s, 2.5 * s, 12 * s]); add(f.skin, [x + 5.5 * s, y - 26 * s, 2.5 * s, 12 * s]); }
+    if (f.sign) add('#fff', [x - 11 * s, y - 38 * s, 22 * s, 13 * s]);
+  }
+  for (const [col, v] of _crowdBatch) {
+    if (!v.length) continue;
+    c.fillStyle = col; c.beginPath();
+    for (const r of v) c.rect(r[0], r[1], r[2], r[3]);
+    c.fill();
   }
 }
 
@@ -278,7 +314,7 @@ function grassData(S) {
 function drawGrassDetail(c, S) {
   const G = grassData(S);
   const light = G.ice ? 'rgba(255,255,255,' : 'rgba(255,250,200,', dark = G.ice ? 'rgba(60,110,160,' : 'rgba(10,40,0,';
-  for (const p of G.patches) {
+  if (Perf.q.grass > 1) for (const p of G.patches) { // big soft see-through fills: the costly part
     c.fillStyle = (p.light ? light : dark) + p.a.toFixed(3) + ')';
     c.beginPath();
     for (const b of p.blobs) {
@@ -316,7 +352,7 @@ function drawPitch(c) {
   const y0 = PY(0), y1 = PY(FH);
   const n = 14, w = FW / n;
   for (let i = 0; i < n; i++) quad(c, [P3(i * w, 0), P3((i + 1) * w + 1, 0), P3((i + 1) * w + 1, FH), P3(i * w, FH)], i % 2 ? S.grassA : S.grassB);
-  drawGrassDetail(c, S);
+  if (Perf.q.grass) drawGrassDetail(c, S);
   // run-off area beyond goal lines
   c.fillStyle = shade(S.grassA, -0.15);
   quad(c, [P3(-GOAL_D - 40, 0), P3(0, 0), P3(0, FH), P3(-GOAL_D - 40, FH)], c.fillStyle);
@@ -665,7 +701,7 @@ function drawParticles(c) {
         c.beginPath(); c.ellipse(PX(q.x, q.y), PY(q.y), q.size * CZ * k, q.size * CZ * k * GT(q.y), 0, 0, TAU); c.stroke(); c.globalAlpha = 1; break;
       }
       case 'bolt': {
-        c.globalAlpha = a; c.strokeStyle = '#ffffff'; c.lineWidth = 6 * CZ; c.shadowColor = '#7cf3ff'; c.shadowBlur = 20;
+        c.globalAlpha = a; c.strokeStyle = '#ffffff'; c.lineWidth = 6 * CZ; if (Perf.q.glow) { c.shadowColor = '#7cf3ff'; c.shadowBlur = 20; }
         c.beginPath(); let px = PX(q.x, q.y, 700), py = PY(q.y, 700); c.moveTo(px, py);
         for (let i = 1; i <= 8; i++) { const z = 700 - i * 87.5; px = PX(q.x + rand(-40, 40) * (i < 8 ? 1 : 0), q.y, z); py = PY(q.y, z); c.lineTo(px, py); }
         c.stroke(); c.shadowBlur = 0; c.globalAlpha = 1; break;

@@ -1,0 +1,11 @@
+{
+  "name": "monate-cup",
+  "private": true,
+  "description": "Monate Cup: Africa's funniest football. No build is needed to play from this folder; `npm run build` makes the small, offline-ready site in dist/.",
+  "scripts": {
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}
