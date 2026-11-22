@@ -85,20 +85,28 @@ const Touch = {
   active: false, stick: null, buttons: {}, // buttons[name] = touchId
   taps: {}, tapPending: null,
   stickVec: { x: 0, y: 0 },
+  usedStick: false,
+  // Buttons sit on two arcs around SHOOT in the bottom-right corner, every one fully on screen.
+  // ITEM only exists while your team is carrying an item (it shows which one), so it can't be pressed by mistake.
   layout(W, H) {
-    const r = Math.min(W, H) * 0.085;
-    const bx = W - r * 1.6, by = H - r * 1.7;
-    return {
-      stickR: Math.min(W, H) * 0.13,
-      btns: {
-        shoot: { x: bx, y: by, r: r * 1.05, label: 'SHOOT', color: '#ff5c5c' },
-        pass: { x: bx - r * 2.3, y: by + r * 0.5, r: r * 0.9, label: 'PASS', color: '#4dabf7' },
-        tackle: { x: bx - r * 0.4, y: by - r * 2.2, r: r * 0.85, label: 'TACKLE', color: '#ffd43b' },
-        item: { x: bx - r * 2.6, y: by - r * 1.6, r: r * 0.75, label: 'ITEM', color: '#b197fc' },
-        ability: { x: bx - r * 4.5, y: by + r * 0.2, r: r * 0.8, label: 'POWER', color: '#ff922b' },
-        dodge: { x: bx - r * 4.6, y: by - r * 1.9, r: r * 0.7, label: 'DODGE', color: '#63e6be' },
-      },
+    const m = Math.min(W, H);
+    const r = clamp(m * 0.082, 24, 44);          // regular button radius (~50-90px wide: comfortable thumb size)
+    const R = r * 1.32;                           // SHOOT is the big one
+    const edge = Math.max(10, m * 0.03);
+    const sx = W - edge - R, sy = H - edge - R;
+    const D = R + r * 1.36;                       // inner arc
+    const at = (ang, d) => ({ x: sx + Math.cos(ang) * d, y: sy + Math.sin(ang) * d });
+    const item = typeof touchItemKey === 'function' ? touchItemKey() : null;
+    const btns = {
+      shoot: { x: sx, y: sy, r: R, label: 'SHOOT', color: '#ff5c5c' },
+      pass: { ...at(Math.PI, D), r, label: 'PASS', color: '#4dabf7' },
+      tackle: { ...at(-Math.PI / 2, D), r, label: 'TACKLE', color: '#ffd43b' },
+      dodge: { ...at(-Math.PI * 0.75, D), r: r * 0.86, label: 'DODGE', color: '#63e6be' },
+      ability: { x: sx - D - r * 2.2, y: sy + r * 0.1, r, label: 'POWER', color: '#ff922b' },
     };
+    if (item) btns.item = { ...at(-Math.PI * 0.75, D + r * 2.05), r: r * 0.95, label: 'USE', color: '#b197fc', item };
+    const left = btns.ability.x - r, top = Math.min(btns.tackle.y, btns.item ? btns.item.y : 1e9) - r;
+    return { stickR: m * 0.13, btns, w: W - left, h: H - top };
   },
 };
 function touchPos(t) { return { x: t.clientX, y: t.clientY }; }
@@ -107,7 +115,8 @@ function handleTouch(e) {
   e.preventDefault();
   SFX.init();
   Touch.active = true;
-  const L = Touch.layout(window.innerWidth, window.innerHeight);
+  const W = typeof App !== 'undefined' && App.W ? App.W : window.innerWidth, H = typeof App !== 'undefined' && App.H ? App.H : window.innerHeight;
+  const L = Touch.layout(W, H);
   const ids = new Set();
   for (const t of e.changedTouches) {
     if (e.type === 'touchstart') Touch.taps[t.identifier] = { x: t.clientX, y: t.clientY, t: performance.now() };
@@ -132,10 +141,10 @@ function handleTouch(e) {
     // new touch: on-screen pad only exists during live play; menus use taps (pointer events)
     const inGame = typeof App !== 'undefined' && App.screen === 'match' && !App.paused;
     if (!inGame) continue;
-    let hit = null;
-    for (const n in L.btns) { const b = L.btns[n]; if (Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.25) hit = n; }
+    let hit = null, best = Infinity;
+    for (const n in L.btns) { const b = L.btns[n], d = Math.hypot(p.x - b.x, p.y - b.y) / b.r; if (d < 1.3 && d < best) { best = d; hit = n; } }
     if (hit) Touch.buttons[hit] = t.identifier;
-    else if (!Touch.stick && p.x < window.innerWidth * 0.55) Touch.stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y };
+    else if (!Touch.stick && p.x < W * 0.55) { Touch.stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y }; Touch.usedStick = true; }
   }
   if (Touch.stick && !ids.has(Touch.stick.id)) { Touch.stick = null; Touch.stickVec.x = Touch.stickVec.y = 0; }
   for (const n in Touch.buttons) if (!ids.has(Touch.buttons[n])) delete Touch.buttons[n];

@@ -25,12 +25,21 @@ const App = {
   init() {
     this.cv = document.getElementById('game');
     this.c = this.cv.getContext('2d');
+    // Size to the VISIBLE viewport. On phones, 100vh / innerHeight can include the strip hidden behind the
+    // browser toolbar, which pushed the bottom buttons off-screen and made taps land in the wrong place.
     const rs = () => {
+      const vv = window.visualViewport;
+      const w = Math.round(vv ? vv.width : window.innerWidth), h = Math.round(vv ? vv.height : window.innerHeight);
       this.dpr = Math.min(2, window.devicePixelRatio || 1);
-      this.W = window.innerWidth; this.H = window.innerHeight;
+      this.W = Math.max(320, Math.min(w, window.innerWidth || w)); this.H = Math.max(200, Math.min(h, window.innerHeight || h));
+      this.cv.style.width = this.W + 'px'; this.cv.style.height = this.H + 'px';
       this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr);
+      window.scrollTo(0, 0);
     };
-    window.addEventListener('resize', rs); rs();
+    window.addEventListener('resize', rs);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', rs);
+    window.addEventListener('orientationchange', () => { rs(); setTimeout(rs, 250); setTimeout(rs, 700); }); // iOS reports stale sizes at first
+    rs();
     this.cv.addEventListener('pointerdown', () => { SFX.init(); this.cv.focus(); });
     try {
       const s = JSON.parse(localStorage.getItem('monatecup') || localStorage.getItem('jollofcup') || 'null');
@@ -101,6 +110,14 @@ const App = {
     if (this.form) { this.cv.style.cursor = 'default'; Mouse.clicked = false; return true; }
     let top = null;
     for (const h of this.hits) if (Mouse.x >= h.x && Mouse.x <= h.x + h.w && Mouse.y >= h.y && Mouse.y <= h.y + h.h) top = h;
+    if ((!top || !top.onClick) && Mouse.type !== 'mouse' && Mouse.clicked) { // fingers are fat: accept a near miss
+      let best = 14;
+      for (const h of this.hits) {
+        if (!h.onClick || h.w * h.h > this.W * this.H * 0.5) continue;
+        const dx = Math.max(h.x - Mouse.x, 0, Mouse.x - h.x - h.w), dy = Math.max(h.y - Mouse.y, 0, Mouse.y - h.y - h.h), d = Math.hypot(dx, dy);
+        if (d < best) { best = d; top = h; }
+      }
+    }
     this.cv.style.cursor = top && Mouse.type === 'mouse' ? 'pointer' : 'default';
     if (!top) return false;
     if (Mouse.moved && top.onHover) top.onHover();
@@ -147,7 +164,13 @@ const App = {
   // ------------------------------------------------------------------ title
   titleItems() {
     return [
-      ['▶  PLAY', () => { if (Touch.active) this.sides.touch = -1; this.go('join'); }],
+      ['▶  PLAY', () => {
+        if (Touch.active) {
+          this.sides.touch = -1;
+          for (const k of ['kb1', 'kb2']) if (!Input.devices[k].lastActive) this.sides[k] = 0; // no keyboard on a phone: don't count it as a player
+        }
+        this.go('join');
+      }],
       ['👥  CHARACTERS', () => this.openChars()],
       ['🎮  CONTROLLERS', () => { this.padsReturn = 'title'; this.go('pads'); }],
       ['❓  HOW TO PLAY', () => { this.helpReturn = 'title'; this.go('help'); }],
@@ -155,12 +178,18 @@ const App = {
   },
   uTitle() {
     const items = this.titleItems();
-    const ny = Input.navY();
+    const ny = Input.navY() || (this.compact() ? Input.navX() : 0);
     if (ny) { this.sel = (this.sel + ny + items.length) % items.length; SFX.ui(); }
     if (Input.confirm()) { SFX.init(); items[this.sel][1](); }
   },
   // ------------------------------------------------------------------ join
-  joinDevices() { return Input.order.filter(id => id === 'kb1' || id === 'kb2' || Input.devices[id].connected); },
+  joinDevices() {
+    return Input.order.filter(id => {
+      const d = Input.devices[id];
+      if (id === 'kb1' || id === 'kb2') return !Touch.active || d.lastActive > 0 || this.sides[id] !== 0; // phones: hide keyboards nobody has touched
+      return d.connected;
+    });
+  },
   uJoin() {
     for (const id of this.joinDevices()) {
       const d = Input.devices[id];
@@ -315,7 +344,7 @@ const App = {
   // ------------------------------------------------------------------ pause: controls + how to play
   ctlDevices() {
     const mine = M ? M.teams.flatMap(t => t.humans.map(h => h.dev)) : [];
-    const all = Input.order.filter(id => id === 'kb1' || id === 'kb2' || Input.devices[id].connected);
+    const all = Input.order.filter(id => (id === 'kb1' || id === 'kb2') ? (!Touch.active || Input.devices[id].lastActive > 0) : Input.devices[id].connected);
     return [...new Set([...mine, ...all])];
   },
   myDevice() {
@@ -445,7 +474,13 @@ const App = {
     this.rToasts(c);
     this.rRotate(c);
   },
-  u() { return Math.min(this.W / 1280, this.H / 720) * (this.W < 700 ? 1.3 : 1); },
+  // Short screens (phones in landscape) get a compact layout: a 960x440 design space, so text and
+  // buttons come out much bigger than squeezing the 1280x720 desktop layout onto a 350px-tall screen.
+  compact() { return this.H < 560; },
+  u() {
+    if (this.compact()) return Math.min(this.W / 960, this.H / 440);
+    return Math.min(this.W / 1280, this.H / 720) * (this.W < 700 ? 1.3 : 1);
+  },
 
   // ---------------------------------------------------------------- widgets
   panel(c, x, y, w, h, col = 'rgba(10,12,34,0.85)', border = 'rgba(255,255,255,0.7)') {
@@ -454,7 +489,7 @@ const App = {
   },
   button(c, x, y, w, h, label, onClick, o = {}) {
     const hov = this.over(x, y, w, h), on = o.sel || hov;
-    this.panel(c, x, y, w, h, on ? (o.selColor || 'rgba(255,224,102,0.3)') : (o.color || 'rgba(10,12,34,0.88)'), on ? '#ffe066' : 'rgba(255,255,255,0.45)');
+    this.panel(c, x, y, w, h, on ? (o.selColor || (o.color && o.color.startsWith('rgba(30,140,60') ? 'rgba(46,170,80,0.97)' : 'rgba(78,66,14,0.95)')) : (o.color || 'rgba(10,12,34,0.9)'), on ? '#ffe066' : 'rgba(255,255,255,0.45)');
     const size = o.size || Math.min(h * 0.46, w / (label.length * 0.58));
     text(c, label, x + w / 2, y + h / 2 + 1, size, on ? '#ffe066' : (o.textColor || '#fff'), 'center', '#000', Math.max(2, size * 0.14));
     this.hit(x, y, w, h, onClick, o.hover, label);
@@ -462,11 +497,30 @@ const App = {
   },
   navButtons(c, back, next, nextLabel = 'NEXT  ▶') {
     const u = this.u();
+    if (this.compact()) {
+      if (back) this.button(c, 8 * u, 8 * u, 104 * u, 38 * u, '◀  BACK', back, { size: 16 * u });
+      if (next) this.button(c, this.W - 168 * u, this.H - 54 * u, 160 * u, 46 * u, nextLabel, next, { size: 20 * u, color: 'rgba(30,140,60,0.92)' });
+      return;
+    }
     if (back) this.button(c, 14 * u, 14 * u, 120 * u, 42 * u, '◀  BACK', back, { size: 17 * u });
     if (next) this.button(c, this.W - 194 * u, this.H - 70 * u, 180 * u, 52 * u, nextLabel, next, { size: 22 * u, color: 'rgba(30,140,60,0.92)' });
   },
+  // small icon toggles for sound + music (x, y = top-left of the pair)
+  soundPair(c, x, y, s = 1) {
+    const u = this.u() * s, bw = 50 * u, bh = 36 * u;
+    this.button(c, x, y, bw, bh, SFX.muted ? '🔇' : '🔊', () => SFX.setMuted(!SFX.muted), { size: 18 * u });
+    this.button(c, x + bw + 6 * u, y, bw, bh, '🎵', () => SFX.toggleMusic(), { size: 18 * u, textColor: SFX.musicOn ? '#fff' : '#666', color: SFX.musicOn ? undefined : 'rgba(40,10,10,0.88)' });
+    if (!SFX.musicOn) { c.strokeStyle = '#ff6b6b'; c.lineWidth = 3 * u; c.beginPath(); c.moveTo(x + bw + 18 * u, y + 8 * u); c.lineTo(x + 2 * bw - 6 * u, y + bh - 8 * u); c.stroke(); }
+    return 2 * bw + 6 * u;
+  },
   rSoundButtons(c) {
     const u = this.u(), W = this.W, H = this.H;
+    if (this.compact()) {
+      // top-right when it's free, otherwise bottom-left; never on top of a NEXT / PICK button
+      if (['capL', 'capR', 'chars'].includes(this.screen)) return;
+      this.soundPair(c, W - 114 * u, 8 * u);
+      return;
+    }
     const y = H - 34 * u, h = 26 * u;
     const showNext = !['title', 'help', 'pads', 'chars'].includes(this.screen);
     const x0 = showNext ? 14 * u : W - 234 * u;
@@ -486,10 +540,15 @@ const App = {
   },
   header(c, str, sub) {
     const W = this.W, u = this.u();
+    if (this.compact()) {
+      text(c, str, W / 2, 27 * u, Math.min(34 * u, (W - 260 * u) / (str.length * 0.55)), '#ffe066', 'center', '#000', 5 * u);
+      if (sub) text(c, sub, W / 2, 56 * u, Math.min(13 * u, (W - 30) / (sub.length * 0.5)), '#fff', 'center', '#000', 2.5 * u);
+      return;
+    }
     text(c, str, W / 2, 50 * u, 46 * u, '#ffe066', 'center', '#000', 7 * u);
     if (sub) text(c, sub, W / 2, 92 * u, Math.min(18 * u, (W - 40) / (sub.length * 0.5)), '#fff', 'center', '#000', 3 * u);
   },
-  footer(c, str) { text(c, str, this.W / 2, this.H - 92 * this.u(), Math.min(15 * this.u(), (this.W - 40) / (str.length * 0.5)), 'rgba(255,255,255,0.8)', 'center', '#000', 3); },
+  footer(c, str) { if (this.compact()) return; text(c, str, this.W / 2, this.H - 92 * this.u(), Math.min(15 * this.u(), (this.W - 40) / (str.length * 0.5)), 'rgba(255,255,255,0.8)', 'center', '#000', 3); },
 
   logo(c, x, y, size) {
     const str = GAME_NAME;
@@ -513,6 +572,7 @@ const App = {
   rTitle(c) {
     const W = this.W, H = this.H, u = this.u();
     this.hit(0, 0, W, H, null); // background (no action, keeps cursor sane)
+    if (this.compact()) { this.rTitleCompact(c); return; }
     this.logo(c, W / 2, H * 0.24, Math.min(140 * u, W / 7.5));
     text(c, GAME_TAGLINE, W / 2, H * 0.24 + 84 * u, Math.min(22 * u, (W - 30) / (GAME_TAGLINE.length * 0.55)), '#ffffff', 'center', '#000', 4 * u);
     // kente strip
@@ -525,18 +585,43 @@ const App = {
       const y = H * 0.47 + i * (bh + 10 * u);
       this.button(c, W / 2 - bw / 2, y, bw, bh, label, fn, { sel: this.sel === i, size: (i === 0 ? 30 : 22) * u, color: i === 0 ? 'rgba(30,140,60,0.92)' : undefined, hover: () => { this.sel = i; } });
     });
-    const tips = ['Hold SHOOT to charge. Captains: fully charge near goal, release when the ring hits the green circle for a SUPER STRIKE!',
-      'Tackle someone who doesn\'t have the ball and their team gets a power-up. Wahala pays... them.',
-      'Grab the ? boxes for market chickens, coconut bombs, killer bees and worse.',
-      'Plug in Xbox, PlayStation, Switch or almost any USB controller. Up to 4 pads + 2 keyboards.',
-      'Press SHOOT while a pass is on its way for a one-touch PERFECT shot.',
-      'Watch out in Lagos: NEPA can take light in the middle of the match!'];
+    const tips = this.titleTips();
     const tip = tips[Math.floor(this.t / 5) % tips.length];
     const tw = Math.min(W - 40, 900 * u);
     this.panel(c, W / 2 - tw / 2, H - 112 * u, tw, 48 * u);
     text(c, '💡 ' + tip, W / 2, H - 88 * u, Math.min(16 * u, (W - 60) / (tip.length * 0.5)), '#fff', 'center', null);
   },
 
+  titleTips() {
+    return ['Hold SHOOT to charge. Captains: fully charge near goal, release when the ring hits the green circle for a SUPER STRIKE!',
+      'Tackle someone who doesn\'t have the ball and their team gets a power-up. Wahala pays... them.',
+      'Run over ? boxes to grab an item. An ITEM button appears with the item on it: tap it to use it.',
+      'Plug in Xbox, PlayStation, Switch or almost any USB controller. Up to 4 pads + 2 keyboards.',
+      'Press SHOOT while a pass is on its way for a one-touch PERFECT shot.',
+      'Watch out in Lagos: NEPA can take light in the middle of the match!'];
+  },
+  rTitleCompact(c) {
+    const W = this.W, H = this.H, u = this.u();
+    const ly = 66 * u;
+    this.logo(c, W / 2, ly, Math.min(88 * u, W / 8));
+    text(c, GAME_TAGLINE, W / 2, ly + 52 * u, Math.min(17 * u, (W - 30) / (GAME_TAGLINE.length * 0.55)), '#ffffff', 'center', '#000', 3 * u);
+    const ks = ['#fcd116', '#1b8a3c', '#e8433a', '#111'];
+    for (let i = 0; i < 32; i++) { c.fillStyle = ks[i % 4]; c.fillRect(W / 2 - 240 * u + i * 15 * u, ly + 66 * u, 15 * u, 6 * u); }
+    text(c, GAME_MEANING, W / 2, ly + 84 * u, 12 * u, '#ffe066', 'center', '#000', 2, FONT_UI);
+    const items = this.titleItems();
+    const bw = Math.min(W - 40 * u, 460 * u), x0 = W / 2 - bw / 2, y0 = ly + 104 * u;
+    const [l0, f0] = items[0];
+    this.button(c, x0, y0, bw, 60 * u, l0, f0, { sel: this.sel === 0, size: 30 * u, color: 'rgba(30,140,60,0.92)', hover: () => { this.sel = 0; } });
+    const sw = (bw - 2 * 10 * u) / 3;
+    items.slice(1).forEach(([label, fn], k) => {
+      const i = k + 1;
+      this.button(c, x0 + k * (sw + 10 * u), y0 + 70 * u, sw, 48 * u, label, fn, { sel: this.sel === i, hover: () => { this.sel = i; } });
+    });
+    const tips = this.titleTips(), tip = tips[Math.floor(this.t / 5) % tips.length];
+    const tw = Math.min(W - 150 * u, 740 * u), ty = Math.min(H - 52 * u, y0 + 134 * u);
+    this.panel(c, 10 * u, ty, tw, 42 * u);
+    wrapFit(c, '💡 ' + tip, 10 * u + 12 * u, ty + 21 * u, tw - 24 * u, 13 * u, 2, '#fff');
+  },
   controlsCard(c, x, y, w) {
     const u = this.u();
     const rows = [['', 'MOVE', 'PASS / SWITCH', 'SHOOT (HOLD)', 'TACKLE / JUKE', 'ITEM', 'POWER', 'DODGE'],
@@ -554,6 +639,13 @@ const App = {
 
   rHelp(c) {
     const W = this.W, H = this.H, u = this.u();
+    if (this.compact()) {
+      text(c, 'HOW TO PLAY', W / 2, 27 * u, 34 * u, '#ffe066', 'center', '#000', 5 * u);
+      const dev = Touch.active ? 'touch' : this.myDevice();
+      this.howToBody(c, dev, 56 * u, false);
+      this.navButtons(c, () => this.back(this.helpReturn), null);
+      return;
+    }
     this.header(c, 'HOW TO PLAY', 'Score more than the other team. Everything else is optional. Especially the rules.');
     const w = Math.min(W - 30, 1000 * u);
     const h = this.controlsCard(c, W / 2 - w / 2, 120 * u, w);
@@ -580,16 +672,18 @@ const App = {
   rPads(c) {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'CONTROLLERS', 'Plug in a controller and press any button. Xbox, PlayStation, Switch, 8BitDo, Logitech, Steam, phone & retro USB pads all work.');
-    const pads = Input.slotPads();
-    const cols = W < 900 ? 1 : 2, cw = Math.min((W - 60 * u) / cols - 10 * u, 560 * u), ch = Math.min(170 * u, (H - 280 * u) / (4 / cols));
-    for (let i = 0; i < 4; i++) {
+    const pads = Input.slotPads(), K = this.compact();
+    const slots = K ? [0, 1, 2, 3].filter(i => pads[i]) : [0, 1, 2, 3];
+    const cols = K ? 2 : W < 900 ? 1 : 2, cw = Math.min((W - 60 * u) / cols - 10 * u, 560 * u);
+    const ch = K ? Math.min(160 * u, (H - 150 * u) / Math.max(1, Math.ceil(slots.length / 2)) - 14 * u) : Math.min(170 * u, (H - 280 * u) / (4 / cols));
+    slots.forEach((i, k) => {
       const id = 'pad' + i, d = Input.devices[id], gp = pads[i];
-      const x = W / 2 - (cols * (cw + 16 * u) - 16 * u) / 2 + (i % cols) * (cw + 16 * u), y = 120 * u + Math.floor(i / cols) * (ch + 14 * u);
+      const x = W / 2 - (cols * (cw + 16 * u) - 16 * u) / 2 + (k % cols) * (cw + 16 * u), y = (K ? 72 : 120) * u + Math.floor(k / cols) * (ch + 14 * u);
       this.panel(c, x, y, cw, ch, gp ? 'rgba(10,12,34,0.9)' : 'rgba(10,12,34,0.55)', gp ? HUMAN_COLORS[Input.order.indexOf(id)] : 'rgba(255,255,255,0.25)');
       if (!gp) {
         text(c, `P${i + 3}  ·  EMPTY SLOT`, x + cw / 2, y + ch * 0.4, 20 * u, '#888', 'center', null);
         text(c, 'Connect a controller and press any button to wake it up', x + cw / 2, y + ch * 0.62, Math.min(13 * u, cw / 50), '#777', 'center', null, 0, FONT_UI);
-        continue;
+        return;
       }
       const fam = PAD_FAMILIES[d.family];
       text(c, `P${i + 3}  ${fam.icon}  ${fam.name.toUpperCase()}`, x + 16 * u, y + 24 * u, 19 * u, HUMAN_COLORS[Input.order.indexOf(id)], 'left', '#000', 3);
@@ -622,7 +716,7 @@ const App = {
       if (PAD_MAPS[gp.id]) this.button(c, x + 270 * u, by, 110 * u, 32 * u, '↺ RESET', () => { delete PAD_MAPS[gp.id]; savePadMaps(); this.toast('Controller back to default mapping'); }, { size: 14 * u });
       const hold = this.padHold[id] || 0;
       if (hold > 0.2) { c.fillStyle = '#ffe066'; c.fillRect(x, y + ch - 5 * u, cw * Math.min(1, hold / 2), 5 * u); }
-    }
+    });
     if (!pads.some(Boolean)) {
       const issues = [];
       if (!navigator.getGamepads) issues.push('❌ This browser has no gamepad support. Use Chrome, Edge, Firefox or Safari (latest).');
@@ -631,14 +725,14 @@ const App = {
       issues.push('👉 PRESS A BUTTON on the controller: browsers hide controllers until a button is pressed.');
       issues.push('👉 Xbox / PC pads: plug in by USB or pair via Bluetooth BEFORE pressing a button. If on Windows, close Steam\'s overlay.');
       issues.push('👉 PlayStation pads work best in Chrome or Edge.');
-      const bw = Math.min(W - 40, 860 * u), bh = 40 * u + issues.length * 24 * u, bx = W / 2 - bw / 2, by0 = Math.max(120 * u, H / 2 - bh / 2);
+      const bw = Math.min(W - 40, 860 * u), bh = 40 * u + issues.length * 24 * u, bx = W / 2 - bw / 2, by0 = Math.max((K ? 74 : 120) * u, H / 2 - bh / 2);
       this.panel(c, bx, by0, bw, bh, 'rgba(8,10,28,0.96)', '#ffd43b');
       text(c, 'NO CONTROLLER DETECTED YET', W / 2, by0 + 22 * u, 18 * u, '#ffd43b', 'center', '#000', 3);
       issues.forEach((t, k) => text(c, t, bx + 18 * u, by0 + 50 * u + k * 24 * u, Math.min(14 * u, (bw - 36 * u) / (t.length * 0.5)), t.startsWith('👉') ? '#fff' : '#ff8787', 'left', null, 0, FONT_UI));
     }
-    if (Input.extraPads) text(c, `${Input.extraPads} more controller(s) detected — only 4 can play at once.`, W / 2, H - 122 * u, 12 * u, '#ffd43b', 'center', null, 0, FONT_UI);
-    text(c, 'Wrong buttons? Click REMAP, press 1-4 on the keyboard, or HOLD ANY BUTTON on the controller for 2 seconds.', W / 2, H - 100 * u, Math.min(14 * u, (W - 40) / 100 * 1.9), '#fff', 'center', '#000', 3);
-    text(c, 'Back: Esc / click BACK / press START on a controller', W / 2, H - 78 * u, 12 * u, '#aaa', 'center', null, 0, FONT_UI);
+    if (Input.extraPads) text(c, `${Input.extraPads} more controller(s) detected — only 4 can play at once.`, W / 2, H - (K ? 52 : 122) * u, 12 * u, '#ffd43b', 'center', null, 0, FONT_UI);
+    text(c, 'Wrong buttons? Click REMAP, press 1-4 on the keyboard, or HOLD ANY BUTTON on the controller for 2 seconds.', W / 2, H - (K ? 32 : 100) * u, Math.min(14 * u, (W - 40) / 100 * 1.9), '#fff', 'center', '#000', 3);
+    if (!K) text(c, 'Back: Esc / click BACK / press START on a controller', W / 2, H - 78 * u, 12 * u, '#aaa', 'center', null, 0, FONT_UI);
     this.navButtons(c, () => this.back(this.padsReturn), null);
     if (this.remap) this.rRemap(c);
   },
@@ -661,10 +755,10 @@ const App = {
   },
 
   rJoin(c) {
-    const W = this.W, H = this.H, u = this.u();
-    this.header(c, 'WHO\'S PLAYING?', 'Move your controller LEFT or RIGHT (or click the arrows) to pick a team. The middle sits out and the CPU plays.');
-    const colW = Math.min(360 * u, W / 3.2), cx = [W / 2 - colW * 1.05, W / 2, W / 2 + colW * 1.05];
-    const top = 118 * u, h = Math.max(140 * u, H - top - 330 * u);
+    const W = this.W, H = this.H, u = this.u(), K = this.compact();
+    this.header(c, 'WHO\'S PLAYING?', K ? 'Tap the arrows (or push a controller left / right) to pick a side. The middle sits out.' : 'Move your controller LEFT or RIGHT (or click the arrows) to pick a team. The middle sits out and the CPU plays.');
+    const colW = K ? Math.min(300 * u, (W - 30 * u) / 3.1) : Math.min(360 * u, W / 3.2), cx = [W / 2 - colW * 1.05, W / 2, W / 2 + colW * 1.05];
+    const top = K ? 70 * u : 118 * u, h = K ? Math.max(120 * u, H - top - 128 * u) : Math.max(140 * u, H - top - 330 * u);
     const capL = CAPTAINS.find(x => x.id === this.cfg.capL), capR = CAPTAINS.find(x => x.id === this.cfg.capR);
     const labels = ['LEFT TEAM', 'NOT PLAYING', 'RIGHT TEAM'];
     for (let i = 0; i < 3; i++) {
@@ -675,9 +769,9 @@ const App = {
     const counts = [0, 0, 0];
     devs.forEach(id => {
       const col = this.sides[id] + 1, d = Input.devices[id];
-      const y = top + 50 * u + counts[col]++ * 46 * u;
+      const y = top + (K ? 44 : 50) * u + counts[col]++ * (K ? 50 : 46) * u;
       const color = HUMAN_COLORS[Input.order.indexOf(id)];
-      const bw = colW * 0.72, bx = cx[col] - bw / 2, bh = 38 * u;
+      const aw = K ? 40 * u : 28 * u, bw = K ? colW - 2 * aw - 22 * u : colW * 0.72, bx = cx[col] - bw / 2, bh = K ? 42 * u : 38 * u;
       const hov = this.over(bx, y, bw, bh);
       c.fillStyle = color; rrect(c, bx, y, bw, bh, 10 * u); c.fill();
       c.strokeStyle = hov ? '#ffe066' : '#000'; c.lineWidth = 3; c.stroke();
@@ -686,17 +780,22 @@ const App = {
       const nm = `P${Input.order.indexOf(id) + 1} ${d.name.toUpperCase()}`;
       text(c, nm, cx[col] + 10 * u, y + bh / 2 + 1, Math.min(15 * u, (bw - 40 * u) / (nm.length * 0.6)), '#fff', 'center', '#000', 3 * u);
       this.hit(bx, y, bw, bh, () => { this.sides[id] = this.sides[id] >= 1 ? -1 : this.sides[id] + 1; SFX.ui(); });
-      if (col > 0) this.button(c, bx - 34 * u, y + 4 * u, 28 * u, 30 * u, '◀', () => { this.sides[id] = Math.max(-1, this.sides[id] - 1); SFX.ui(); }, { size: 14 * u });
-      if (col < 2) this.button(c, bx + bw + 6 * u, y + 4 * u, 28 * u, 30 * u, '▶', () => { this.sides[id] = Math.min(1, this.sides[id] + 1); SFX.ui(); }, { size: 14 * u });
+      const ah = K ? bh : 30 * u, ay = K ? y : y + 4 * u;
+      if (col > 0) this.button(c, bx - aw - 6 * u, ay, aw, ah, '◀', () => { this.sides[id] = Math.max(-1, this.sides[id] - 1); SFX.ui(); }, { size: (K ? 18 : 14) * u });
+      if (col < 2) this.button(c, bx + bw + 6 * u, ay, aw, ah, '▶', () => { this.sides[id] = Math.min(1, this.sides[id] + 1); SFX.ui(); }, { size: (K ? 18 : 14) * u });
     });
     const nL = devs.filter(id => this.sides[id] < 0).length, nR = devs.filter(id => this.sides[id] > 0).length;
     const mode = !nL && !nR ? 'CPU vs CPU: sit back and enjoy the wahala' : (nL && nR ? 'VERSUS! May the best team win.' : (nL + nR > 1 ? 'CO-OP vs CPU!' : 'YOU vs CPU'));
     text(c, mode, W / 2, top + h + 22 * u, 20 * u, '#7CFC00', 'center', '#000', 4 * u);
-    const bw2 = 230 * u;
-    this.button(c, W / 2 - bw2 - 8 * u, top + h + 42 * u, bw2, 34 * u, '🎮 CONTROLLER SETUP', () => { this.padsReturn = 'join'; this.go('pads'); }, { size: 15 * u });
-    this.button(c, W / 2 + 8 * u, top + h + 42 * u, bw2, 34 * u, '❓ HOW TO PLAY', () => { this.helpReturn = 'join'; this.go('help'); }, { size: 15 * u });
-    const cw = Math.min(W - 30, 1000 * u);
-    this.controlsCard(c, W / 2 - cw / 2, top + h + 90 * u, cw);
+    const bw2 = K ? 210 * u : 230 * u, bh2 = K ? 42 * u : 34 * u, by2 = top + h + 42 * u;
+    // compact: keep these two clear of the NEXT button in the bottom-right corner
+    const bx2 = K ? Math.min(W / 2 - bw2 - 8 * u, W - 168 * u - 2 * bw2 - 26 * u) : W / 2 - bw2 - 8 * u;
+    this.button(c, bx2, by2, bw2, bh2, '🎮 CONTROLLER SETUP', () => { this.padsReturn = 'join'; this.go('pads'); }, { size: 15 * u });
+    this.button(c, bx2 + bw2 + 16 * u, by2, bw2, bh2, '❓ HOW TO PLAY', () => { this.helpReturn = 'join'; this.go('help'); }, { size: 15 * u });
+    if (!K) {
+      const cw = Math.min(W - 30, 1000 * u);
+      this.controlsCard(c, W / 2 - cw / 2, top + h + 90 * u, cw);
+    }
     this.navButtons(c, () => this.back('title'), () => this.go('capL'));
   },
 
@@ -706,6 +805,7 @@ const App = {
     const key = left ? 'capL' : 'capR';
     const cap = CAPTAINS.find(x => x.id === this.cfg[key]);
     const humans = Input.order.filter(id => (id === 'kb1' || id === 'kb2' || Input.devices[id].connected) && this.sides[id] === (left ? -1 : 1));
+    if (this.compact()) { this.rCapCompact(c, left, key, cap, humans); return; }
     this.header(c, left ? 'LEFT TEAM CAPTAIN' : 'RIGHT TEAM CAPTAIN', humans.length ? `Controlled by ${humans.map(h => 'P' + (Input.order.indexOf(h) + 1)).join(' + ')}  ·  click a captain, click again (or NEXT) to pick` : 'CPU team: pick their poison');
     const narrow = W < 900;
     const px = narrow ? W / 2 : W * 0.25, py = narrow ? H * 0.4 : H * 0.6;
@@ -753,13 +853,62 @@ const App = {
     this.navButtons(c, () => this.back(left ? 'join' : 'capL'), () => this.pickCaptain(), 'PICK  ▶');
   },
 
+  // Phones in landscape: portrait on the left, info + a big tappable grid on the right.
+  rCapCompact(c, left, key, cap, humans) {
+    const W = this.W, H = this.H, u = this.u();
+    this.header(c, left ? 'LEFT TEAM CAPTAIN' : 'RIGHT TEAM CAPTAIN', humans.length ? `Controlled by ${humans.map(h => 'P' + (Input.order.indexOf(h) + 1)).join(' + ')}  ·  tap a captain, then PICK` : 'CPU team: pick their poison');
+    const lw = Math.min(W * 0.34, 330 * u), px = lw / 2 + 6 * u, feet = H - 118 * u;
+    const ps = Math.min(2.6 * u, (feet - 70 * u) / 100);
+    ellipse(c, px, feet, 70 * ps / 2.2, 18 * ps / 2.2, 'rgba(0,0,0,0.4)');
+    const pk = left ? cap.color : (this.cfg.capL === cap.id || colorDist(CAPTAINS.find(x => x.id === this.cfg.capL).color, cap.color) < 110 ? cap.alt : cap.color);
+    for (let i = 0; i < 2; i++) drawCharacter(c, portraitDesc(cap, 'sidekick', pk, this.t + i, { face: left ? 0.2 : Math.PI - 0.2, expr: 'normal', moving: 0.5 }), px + (i ? 1 : -1) * 66 * ps / 2, feet - 6 * u, ps * 0.48);
+    drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, feet, ps);
+    text(c, cap.name.toUpperCase(), px, feet + 20 * u, Math.min(20 * u, (lw - 10 * u) / (cap.name.length * 0.58)), '#fff', 'center', '#000', 4 * u);
+    text(c, `"${cap.nick}"  ·  ${cap.country.toUpperCase()}`, px, feet + 42 * u, Math.min(13 * u, (lw - 10 * u) / ((cap.nick.length + cap.country.length + 6) * 0.55)), '#ffe066', 'center', '#000', 2.5 * u);
+    this.button(c, px - 85 * u, H - 54 * u, 170 * u, 46 * u, 'PICK  ▶', () => this.pickCaptain(), { size: 20 * u, color: 'rgba(30,140,60,0.92)' });
+    // info panel
+    const gx = lw + 12 * u, gw = W - gx - 10 * u, iy = 70 * u, ih = 160 * u;
+    this.panel(c, gx, iy, gw, ih);
+    text(c, cap.team.toUpperCase(), gx + 12 * u, iy + 17 * u, 17 * u, cap.color === '#111111' ? '#fff' : (cap.color2 === '#111111' ? cap.color : cap.color2), 'left', '#000', 3 * u);
+    wrapFit(c, cap.blurb, gx + 12 * u, iy + 46 * u, gw - 24 * u, 12.5 * u, 2, '#fff');
+    const stats = [['SPEED', cap.speed / 1.25], ['POWER', cap.power / 1.3], ['TACKLE', cap.tackle / 1.45], ['SIZE', cap.size / 1.35]];
+    stats.forEach(([n, v], i) => {
+      const sx = gx + 12 * u + (i % 2) * (gw / 2), sy = iy + 80 * u + Math.floor(i / 2) * 17 * u, bl = gw / 2 - 90 * u;
+      text(c, n, sx, sy, 11.5 * u, '#aaa', 'left', null, 0, FONT);
+      c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(sx + 60 * u, sy - 4 * u, bl, 8 * u);
+      c.fillStyle = cap.color === '#111111' ? '#888' : cap.color; c.fillRect(sx + 60 * u, sy - 4 * u, bl * clamp(v, 0.1, 1), 8 * u);
+    });
+    text(c, `SUPER STRIKE: ${cap.superName}`, gx + 12 * u, iy + 116 * u, Math.min(13 * u, (gw - 24 * u) / ((cap.superName.length + 14) * 0.6)), '#ff8fd0', 'left', '#000', 2.5 * u);
+    const pw1 = `${cap.signature.icon} POWER: ${cap.signature.name} - ${cap.signature.desc}`, pw2 = `${cap.squad.icon} SQUAD: ${cap.squad.name} - ${cap.squad.desc}`;
+    text(c, pw1, gx + 12 * u, iy + 134 * u, Math.min(12 * u, (gw - 24 * u) / (pw1.length * 0.5)), '#ffb066', 'left', null, 0, FONT_UI);
+    text(c, pw2, gx + 12 * u, iy + 150 * u, Math.min(12 * u, (gw - 24 * u) / (pw2.length * 0.5)), '#9cf', 'left', null, 0, FONT_UI);
+    // grid
+    const cols = 4, rows = Math.ceil(CAPTAINS.length / cols), gap = 8 * u, gy = iy + ih + 8 * u;
+    const cw = (gw - (cols - 1) * gap) / cols, chh = Math.max(40 * u, (H - gy - 8 * u - (rows - 1) * gap) / rows);
+    CAPTAINS.forEach((cp, i) => {
+      const x = gx + (i % cols) * (cw + gap), y = gy + Math.floor(i / cols) * (chh + gap);
+      const sel = cp.id === cap.id, hov = this.over(x, y, cw, chh);
+      c.fillStyle = sel ? cp.color : hov ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)'; rrect(c, x, y, cw, chh, 10 * u); c.fill();
+      c.strokeStyle = sel ? '#ffe066' : hov ? '#fff' : 'rgba(255,255,255,0.3)'; c.lineWidth = sel ? 4 : 2; c.stroke();
+      c.save(); c.beginPath(); rrect(c, x, y, cw, chh, 10 * u); c.clip();
+      const sc = Math.min(chh / 80, cw / 70);
+      drawCharacter(c, portraitDesc(cp, 'captain', cp.color, this.t + i, { expr: sel || hov ? 'happy' : 'normal', face: 0.4, moving: sel || hov ? 0.6 : 0 }), x + cw * 0.3, y + chh * 1.04, sc);
+      c.restore();
+      text(c, cp.short.toUpperCase(), x + cw * 0.62, y + chh / 2, Math.min(15 * u, (cw * 0.42) / (cp.short.length * 0.6)), '#fff', 'center', '#000', 3 * u);
+      this.hit(x, y, cw, chh, () => { if (this.cfg[key] === cp.id) this.pickCaptain(); else { this.cfg[key] = cp.id; SFX.ui(); } }, null, 'cap:' + cp.id);
+    });
+    this.button(c, W - 138 * u, 8 * u, 130 * u, 38 * u, '🎲 RANDOM', () => { this.cfg[key] = pick(CAPTAINS).id; SFX.boing(); }, { size: 15 * u });
+    this.navButtons(c, () => this.back(left ? 'join' : 'capL'), null);
+  },
+
   rStadium(c) {
     const W = this.W, H = this.H, u = this.u();
-    this.header(c, 'PICK A STADIUM', 'Each venue has its own walls, hazards and questionable safety record. Click to choose.');
+    const K = this.compact();
+    this.header(c, 'PICK A STADIUM', 'Each venue has its own walls, hazards and questionable safety record. ' + (K ? 'Tap to choose.' : 'Click to choose.'));
     const st = STADIUMS.find(s => s.id === this.cfg.stadium);
     const n = STADIUMS.length;
-    const cw = Math.min(190 * u, (W - 40 * u) / n - 12 * u), chh = cw * 1.25;
-    const x0 = W / 2 - (n * (cw + 12 * u) - 12 * u) / 2, y0 = 130 * u;
+    const cw = Math.min(190 * u, (W - 40 * u) / n - 12 * u), chh = K ? Math.min(cw * 1.2, 150 * u) : cw * 1.25;
+    const x0 = W / 2 - (n * (cw + 12 * u) - 12 * u) / 2, y0 = K ? 84 * u : 130 * u;
     STADIUMS.forEach((s, i) => {
       const sel = s === st, x = x0 + i * (cw + 12 * u), hov = this.over(x, y0 - 12 * u, cw, chh + 12 * u), y = y0 - (sel || hov ? 12 * u : 0);
       const g = c.createLinearGradient(0, y, 0, y + chh); g.addColorStop(0, s.bg); g.addColorStop(0.45, s.bg2); g.addColorStop(0.46, s.grassA); g.addColorStop(1, s.grassB);
@@ -770,9 +919,17 @@ const App = {
       text(c, s.name.toUpperCase(), x + cw / 2, y + chh - 22 * u, Math.min(16 * u, cw / (s.name.length * 0.58)), '#fff', 'center', '#000', 4 * u);
       this.hit(x, y0 - 12 * u, cw, chh + 12 * u, () => { if (this.cfg.stadium === s.id) this.go('options'); else { this.cfg.stadium = s.id; SFX.ui(); } }, null, 'st:' + s.id);
     });
-    const py = y0 + chh + 26 * u, pw = Math.min(W - 40, 800 * u);
-    this.panel(c, W / 2 - pw / 2, py, pw, 120 * u);
-    text(c, st.name.toUpperCase(), W / 2, py + 26 * u, 28 * u, st.wall, 'center', '#000', 5 * u);
+    const py = y0 + chh + (K ? 14 : 26) * u, pw = Math.min(W - 40, 800 * u), ph = K ? 98 * u : 120 * u;
+    this.panel(c, W / 2 - pw / 2, py, pw, ph);
+    text(c, st.name.toUpperCase(), W / 2, py + (K ? 20 : 26) * u, (K ? 22 : 28) * u, st.wall, 'center', '#000', 5 * u);
+    if (K) {
+      const wt0 = { zap: 'Electrified walls ZAP anyone tackled into them.', burn: 'Lava-rock walls leave you crispy like suya.', snow: 'Snowbank walls. Ice pitch: players slide everywhere!', hay: 'Thorn-bush walls bounce you right back. OUCH!', sand: 'Sand-dune walls bury you. The sand slows the ball down.' }[st.wallFx] + (st.grav < 1 ? ' Low gravity: the ball floats!' : '');
+      wrapFit(c, st.desc, W / 2, py + 50 * u, pw - 30 * u, 14 * u, 2, '#fff', 'center');
+      text(c, wt0, W / 2, py + 80 * u, Math.min(13 * u, (pw - 30) / (wt0.length * 0.5)), '#9cf', 'center', null, 0, FONT_UI);
+      this.button(c, W / 2 - pw / 2, H - 54 * u, 150 * u, 44 * u, '🎲 RANDOM', () => { this.cfg.stadium = pick(STADIUMS).id; SFX.boing(); }, { size: 16 * u });
+      this.navButtons(c, () => this.back('capR'), () => this.go('options'));
+      return;
+    }
     text(c, st.desc, W / 2, py + 58 * u, Math.min(16 * u, (pw - 30) / (st.desc.length * 0.5)), '#fff', 'center', null, 0, FONT_UI);
     const wallTxt = { zap: 'Electrified walls ZAP anyone tackled into them.', burn: 'Lava-rock walls leave you crispy like suya.', snow: 'Snowbank walls. Ice pitch: players slide everywhere!', hay: 'Thorn-bush walls bounce you right back. OUCH!', sand: 'Sand-dune walls bury you. The sand slows the ball down.' }[st.wallFx];
     const wt = wallTxt + (st.grav < 1 ? ' Low gravity: the ball floats!' : '');
@@ -784,6 +941,7 @@ const App = {
 
   rOptions(c) {
     const W = this.W, H = this.H, u = this.u();
+    if (this.compact()) { this.rOptionsCompact(c); return; }
     this.header(c, 'MATCH RULES', 'There are no rules. Except these ones.');
     const rows = this.optionRows();
     const rw = Math.min(W - 40, 700 * u), rh = (rows.length > 8 ? 36 : 42) * u, x = W / 2 - rw / 2, y0 = 108 * u;
@@ -820,6 +978,43 @@ const App = {
     this.navButtons(c, () => this.back('stadium'), () => { SFX.whistle(); this.startMatch(); }, 'KICK OFF ▶');
   },
 
+  // Phones: two columns of big rows, one big KICK OFF button. Tap a row to cycle it, or use the arrows.
+  rOptionsCompact(c) {
+    const W = this.W, H = this.H, u = this.u();
+    const capL = CAPTAINS.find(x => x.id === this.cfg.capL), capR = CAPTAINS.find(x => x.id === this.cfg.capR), st = STADIUMS.find(s => s.id === this.cfg.stadium);
+    this.header(c, 'MATCH RULES', `${capL.team}  vs  ${capR.team}  @  ${st.name}`);
+    const rows = this.optionRows(), opts = rows.filter(r => !r.start), startIdx = rows.findIndex(r => r.start);
+    const per = Math.ceil(opts.length / 2), gap = 6 * u;
+    const kb = 54 * u, top = 68 * u, avail = H - top - kb - 14 * u;
+    const rh = Math.min(46 * u, avail / per - gap);
+    const colW = Math.min(470 * u, (W - 30 * u) / 2), xs = [W / 2 - colW - 5 * u, W / 2 + 5 * u];
+    opts.forEach((r, k) => {
+      const i = rows.indexOf(r), x = xs[Math.floor(k / per)], y = top + (k % per) * (rh + gap), sel = i === this.optSel;
+      const hov = this.over(x, y, colW, rh);
+      this.panel(c, x, y, colW, rh, sel || hov ? 'rgba(255,224,102,0.22)' : 'rgba(10,12,34,0.88)', sel || hov ? '#ffe066' : 'rgba(255,255,255,0.4)');
+      const obj = r.opt ? this.opts : this.cfg, hint = r.hint ? r.hint(obj[r.key]) : '';
+      const aw = 42 * u, vw = 112 * u, lab = r.label.toUpperCase(), lw = colW - 2 * aw - vw - 24 * u;
+      text(c, lab, x + 12 * u, y + (hint ? rh * 0.36 : rh / 2), Math.min(15 * u, lw / (lab.length * 0.56)), '#fff', 'left', '#000', 3 * u);
+      if (hint) text(c, hint, x + 12 * u, y + rh * 0.74, Math.min(10.5 * u, lw / (hint.length * 0.47)), '#ffd43b', 'left', null, 0, FONT_UI);
+      this.hit(x, y, colW - 2 * aw - vw - 8 * u, rh, () => { this.optSel = i; this.changeOpt(r, 1); }, () => { this.optSel = i; });
+      const ax = x + colW - 2 * aw - vw - 8 * u;
+      this.button(c, ax, y + 3 * u, aw, rh - 6 * u, '◀', () => { this.optSel = i; this.changeOpt(r, -1); }, { size: 17 * u, hover: () => { this.optSel = i; } });
+      const v = r.fmt(obj[r.key]);
+      text(c, v, ax + aw + vw / 2, y + rh / 2, Math.min(15 * u, vw / (v.length * 0.55)), sel ? '#ffe066' : '#9cf', 'center', '#000', 3 * u);
+      this.hit(ax + aw, y, vw, rh, () => { this.optSel = i; this.changeOpt(r, 1); });
+      this.button(c, ax + aw + vw, y + 3 * u, aw, rh - 6 * u, '▶', () => { this.optSel = i; this.changeOpt(r, 1); }, { size: 17 * u, hover: () => { this.optSel = i; } });
+    });
+    // KICK OFF
+    const bw = Math.min(W - 40 * u, 420 * u), bx = W / 2 - bw / 2, by = H - kb - 6 * u, sel = this.optSel === startIdx;
+    const hov = this.over(bx, by, bw, kb), pulse = sel ? 1 + 0.03 * Math.sin(this.t * 8) : 1;
+    c.save(); c.translate(W / 2, by + kb / 2); c.scale(pulse, pulse);
+    c.fillStyle = sel || hov ? '#51cf66' : '#2b8a3e'; rrect(c, -bw / 2, -kb / 2, bw, kb, 14 * u); c.fill();
+    c.strokeStyle = sel || hov ? '#ffe066' : '#000'; c.lineWidth = 4; c.stroke();
+    text(c, '⚽  KICK OFF!  ⚽', 0, 0, 28 * u, '#fff', 'center', '#000', 5 * u);
+    c.restore();
+    this.hit(bx, by, bw, kb, () => { SFX.whistle(); this.startMatch(); }, () => { this.optSel = startIdx; });
+    this.navButtons(c, () => this.back('stadium'), null);
+  },
   diffCard(c, x, y, w) {
     const u = this.u(), k = this.cfg.difficulty, D = DIFF[k] || DIFF.normal;
     const h = 52 * u + DIFF_BARS.length * 26 * u;
@@ -844,22 +1039,26 @@ const App = {
   rPause(c) {
     const W = this.W, H = this.H, u = this.u();
     this.hits = [];
-    c.fillStyle = 'rgba(5,6,20,0.72)'; c.fillRect(0, 0, W, H);
+    c.fillStyle = this.compact() ? 'rgba(5,6,20,0.86)' : 'rgba(5,6,20,0.72)'; c.fillRect(0, 0, W, H);
     this.hit(0, 0, W, H, null);
     if (this.pv !== 'menu') { c.fillStyle = 'rgba(5,6,20,0.82)'; c.fillRect(0, 0, W, H); }
     if (this.pv === 'controls') { this.rControls(c); return; }
     if (this.pv === 'howto') { this.rHowTo(c); return; }
-    text(c, 'PAUSED', W / 2, H * 0.22, 80 * u, '#ffe066', 'center', '#000', 10 * u);
-    text(c, 'The players are using this time to buy suya.', W / 2, H * 0.22 + 56 * u, 18 * u, '#fff', 'center', '#000', 3);
-    const w = 360 * u, h = 50 * u;
-    this.pauseItems().forEach(([s, fn], i) => {
-      const y = H * 0.4 + i * (h + 12 * u);
+    const K = this.compact();
+    text(c, 'PAUSED', W / 2, K ? 36 * u : H * 0.22, (K ? 50 : 80) * u, '#ffe066', 'center', '#000', 10 * u);
+    text(c, 'The players are using this time to buy suya.', W / 2, K ? 72 * u : H * 0.22 + 56 * u, (K ? 14 : 18) * u, '#fff', 'center', '#000', 3);
+    const items = this.pauseItems(), w = K ? 380 * u : 360 * u, h = K ? 50 * u : 50 * u, gap = K ? 8 * u : 12 * u;
+    const y0 = K ? Math.max(92 * u, (H - items.length * (h + gap)) / 2 + 30 * u) : H * 0.4;
+    items.forEach(([s, fn], i) => {
+      const y = y0 + i * (h + gap);
       this.button(c, W / 2 - w / 2, y, w, h, s, () => { SFX.uiConfirm(); fn(); }, { sel: i === this.pauseSel, size: 22 * u, hover: () => { this.pauseSel = i; } });
     });
-    text(c, 'N: mute    M: music    ESC / START: resume', W / 2, H - 40 * u, 15 * u, 'rgba(255,255,255,0.7)', 'center', null);
+    if (K) this.soundPair(c, W - 114 * u, 8 * u);
+    else this.soundPair(c, W / 2 - 53 * u, H - 92 * u);
+    if (!Touch.active) text(c, 'N: mute    M: music    ESC / START: resume', W / 2, H - (K ? 14 : 40) * u, (K ? 12 : 15) * u, 'rgba(255,255,255,0.7)', 'center', null);
   },
-  devTabs(c, cur, y, onPick) {
-    const W = this.W, u = this.u(), devs = this.ctlDevices();
+  devTabs(c, cur, y, onPick, s = 1) {
+    const W = this.W, u = this.u() * s, devs = this.ctlDevices();
     const mine = M ? M.teams.flatMap(t => t.humans.map(h => h.dev)) : [];
     const tw = Math.min(170 * u, (W - 40 * u) / devs.length - 8 * u), x0 = W / 2 - (devs.length * (tw + 8 * u) - 8 * u) / 2;
     devs.forEach((id, i) => {
@@ -868,8 +1067,35 @@ const App = {
       this.button(c, x0 + i * (tw + 8 * u), y, tw, 34 * u, lab, () => onPick(id), { sel: id === cur, size: Math.min(14 * u, tw / (lab.length * 0.6)) });
     });
   },
+  rControlsCompact(c) {
+    const W = this.W, H = this.H, u = this.u(), C = this.ctl;
+    text(c, 'CONTROLS', W / 2, 27 * u, 34 * u, '#ffe066', 'center', '#000', 5 * u);
+    this.devTabs(c, C.dev, 50 * u, id => { if (!C.cap) { C.dev = id; C.sel = 0; SFX.ui(); } }, 0.85);
+    const acts = this.ctlActions(C.dev), gp = C.dev.startsWith('pad') ? Input.padFor(C.dev) : null;
+    const per = Math.ceil(acts.length / 2), gap = 6 * u, y0 = 88 * u;
+    const rh = Math.min(42 * u, (H - y0 - 80 * u) / per - gap);
+    const colW = Math.min(440 * u, (W - 30 * u) / 2), xs = [W / 2 - colW - 5 * u, W / 2 + 5 * u];
+    acts.forEach((a, i) => {
+      const x = xs[Math.floor(i / per)], y = y0 + (i % per) * (rh + gap), sel = C.sel === i, capNow = C.cap && C.cap.action === a && C.cap.dev === C.dev;
+      const hov = this.over(x, y, colW, rh);
+      this.panel(c, x, y, colW, rh, capNow ? 'rgba(124,252,0,0.25)' : sel || hov ? 'rgba(255,224,102,0.22)' : 'rgba(10,12,34,0.9)', capNow ? '#7CFC00' : sel || hov ? '#ffe066' : 'rgba(255,255,255,0.35)');
+      text(c, ACTION_NAMES[a], x + 12 * u, y + rh / 2, Math.min(15 * u, rh * 0.42), '#fff', 'left', '#000', 3 * u);
+      const v = capNow ? (C.dev.startsWith('kb') ? 'PRESS A KEY…' : 'PRESS A BUTTON…') : actionLabel(C.dev, a);
+      text(c, v, x + colW - 12 * u, y + rh / 2, Math.min(15 * u, (colW * 0.5) / (v.length * 0.55)), capNow ? '#7CFC00' : '#9cf', 'right', '#000', 3 * u);
+      this.hit(x, y, colW, rh, () => { if (!C.cap) { C.sel = i; this.ctlActivate(i); } }, () => { if (!C.cap) C.sel = i; });
+    });
+    const by = y0 + per * (rh + gap) + 4 * u, bw = colW;
+    this.button(c, xs[0], by, bw, 42 * u, '↺ RESET TO DEFAULT', () => this.ctlActivate(acts.length), { sel: C.sel === acts.length, size: 16 * u, hover: () => { C.sel = acts.length; } });
+    this.button(c, xs[1], by, bw, 42 * u, '◀ BACK', () => this.ctlActivate(acts.length + 1), { sel: C.sel === acts.length + 1, size: 16 * u, hover: () => { C.sel = acts.length + 1; } });
+    const note = C.dev === 'touch' ? 'Touch buttons can\'t be remapped. Drag the left half of the screen to run.'
+      : C.dev.startsWith('pad') ? (gp ? `${PAD_FAMILIES[Input.devices[C.dev].family].name} · ${Input.devices[C.dev].mapping === 'custom' ? 'custom layout' : 'default layout'} · saved for this controller` : 'Controller not connected')
+      : 'Esc, P, N, M, Tab, Backspace and Enter stay reserved for menus. Saved in this browser.';
+    text(c, note, W / 2, H - 14 * u, Math.min(12 * u, (W - 40) / (note.length * 0.5)), 'rgba(255,255,255,0.75)', 'center', null);
+    this.button(c, 8 * u, 8 * u, 104 * u, 38 * u, '◀  BACK', () => { this.pv = 'menu'; SFX.uiBack(); }, { size: 16 * u });
+  },
   rControls(c) {
     const W = this.W, H = this.H, u = this.u(), C = this.ctl;
+    if (this.compact()) { this.rControlsCompact(c); return; }
     text(c, 'CONTROLS', W / 2, 44 * u, 44 * u, '#ffe066', 'center', '#000', 7 * u);
     text(c, 'Pick a device, then click an action (or select it and press confirm) and press the new key / button.', W / 2, 78 * u, Math.min(15 * u, (W - 40) / 52), '#fff', 'center', '#000', 3);
     this.devTabs(c, C.dev, 96 * u, id => { if (!C.cap) { C.dev = id; C.sel = 0; SFX.ui(); } });
@@ -907,14 +1133,50 @@ const App = {
       ['🌀', 'JUKE', `${L('tackle')} while you have the ball spins past defenders.`],
       ...(MECH.dodge.enabled ? [['💨', 'DODGE', `${L('dodge')} sidesteps. Time it just as a tackle arrives for a PERFECT DODGE speed boost.`]] : []),
       ['🔥', 'POWER', `${L('ability')} when the meter is full. Captain: ${cap.signature.icon} ${cap.signature.name}. Teammates: ${cap.squad.icon} ${cap.squad.name}.`],
-      ['🎁', 'ITEMS', `Run over ? boxes, then ${L('item')} to use plantain peels, market chickens, coconut bombs and more.`],
+      ['🎁', 'ITEMS', id === 'touch' ? 'Run over ? boxes to grab an item. An ITEM button with the item on it appears: tap it to use it.' : `Run over ? boxes to grab an item (shown under the score), then ${L('item')} to use it.`],
       ...(MECH.hyper.enabled ? [['🔮', 'HYPER STRIKE', `Grab the orb, clear defenders from the box, hold ${L('ability')} and hit the prompts: worth ${MECH.hyper.points} goal${MECH.hyper.points > 1 ? 's' : ''}.`]] : []),
       ...(MECH.offBall.enabled ? [['🚫', 'NO CHEAP SHOTS', 'Flatten someone far from the ball and the other team gets a power-up.']] : []),
     ];
     return { cap, lines };
   },
+  // compact how-to: optional captain strip, then two columns of wrapped tips
+  howToBody(c, dev, top, showCap) {
+    const W = this.W, H = this.H, u = this.u();
+    const { cap, lines } = this.howToLines(dev);
+    const w = Math.min(W - 20 * u, 1060 * u), x = W / 2 - w / 2;
+    let ly = top;
+    if (dev === 'touch') {
+      const tl = '📱 TOUCH: drag anywhere on the LEFT half to run. Buttons on the right. The ITEM button only appears when you are carrying an item.';
+      wrapFit(c, tl, W / 2, ly + 12 * u, w - 20 * u, 12.5 * u, 2, '#9cf', 'center');
+      ly += 30 * u;
+    }
+    if (showCap) {
+      this.panel(c, x, ly, w, 44 * u, 'rgba(10,12,34,0.9)', cap.color);
+      text(c, `${cap.flag} ${cap.name.toUpperCase()}  ·  ${cap.team}`, x + 12 * u, ly + 13 * u, Math.min(15 * u, w / 44), '#ffe066', 'left', '#000', 3 * u);
+      const sp = `${cap.signature.icon} ${cap.signature.name}: ${cap.signature.desc}   ${cap.squad.icon} SQUAD ${cap.squad.name}: ${cap.squad.desc}`;
+      text(c, sp, x + 12 * u, ly + 31 * u, Math.min(12 * u, (w - 24 * u) / (sp.length * 0.5)), '#fff', 'left', null, 0, FONT_UI);
+      ly += 50 * u;
+    }
+    const cols = 2, per = Math.ceil(lines.length / cols), gap = 8 * u, cw = (w - gap) / cols;
+    const lh = (H - ly - 8 * u) / per;
+    lines.forEach(([ic, name, desc], i) => {
+      const col = Math.floor(i / per), row = i % per, lx = x + col * (cw + gap), yy = ly + row * lh, bh = lh - 5 * u;
+      this.panel(c, lx, yy, cw, bh, 'rgba(10,12,34,0.88)', 'rgba(255,255,255,0.3)');
+      drawEmoji(c, ic, lx + 18 * u, yy + bh / 2, Math.min(22 * u, bh * 0.5));
+      text(c, name, lx + 36 * u, yy + Math.min(12 * u, bh * 0.25), Math.min(13 * u, bh * 0.28), '#ffe066', 'left', '#000', 2.5 * u);
+      wrapFit(c, desc, lx + 36 * u, yy + bh * 0.62, cw - 46 * u, Math.min(11.5 * u, bh * 0.26), 2, '#fff');
+    });
+  },
   rHowTo(c) {
     const W = this.W, H = this.H, u = this.u();
+    if (this.compact()) {
+      text(c, 'HOW TO PLAY', W / 2, 27 * u, 34 * u, '#ffe066', 'center', '#000', 5 * u);
+      let top = 54 * u;
+      if (!Touch.active || this.ctlDevices().length > 1) { this.devTabs(c, this.howDev, 50 * u, id => { this.howDev = id; SFX.ui(); }, 0.85); top = 86 * u; }
+      this.howToBody(c, this.howDev, top, true);
+      this.button(c, 8 * u, 8 * u, 104 * u, 38 * u, '◀  BACK', () => { this.pv = 'menu'; SFX.uiBack(); }, { size: 16 * u });
+      return;
+    }
     text(c, 'HOW TO PLAY', W / 2, 44 * u, 44 * u, '#ffe066', 'center', '#000', 7 * u);
     this.devTabs(c, this.howDev, 74 * u, id => { this.howDev = id; SFX.ui(); });
     const { cap, lines } = this.howToLines(this.howDev);
@@ -951,15 +1213,17 @@ const App = {
     }
     const [A, B] = R.teams;
     const win = R.winner;
-    text(c, win ? `${win.name.toUpperCase()} WIN!` : 'IT\'S A DRAW! EVERYBODY HAD FUN!', W / 2, 56 * u, Math.min(50 * u, W / 18), '#ffe066', 'center', '#000', 8 * u);
+    const K = this.compact();
+    text(c, win ? `${win.name.toUpperCase()} WIN!` : 'IT\'S A DRAW! EVERYBODY HAD FUN!', W / 2, (K ? 32 : 56) * u, Math.min((K ? 40 : 50) * u, W / 18), '#ffe066', 'center', '#000', 8 * u);
     for (const [t, sd] of [[A, -1], [B, 1]]) {
-      const x = W / 2 + sd * Math.min(W * 0.3, 330 * u), y = H * 0.5;
+      const x = W / 2 + sd * (K ? Math.min(W * 0.32, W / 2 - 110 * u) : Math.min(W * 0.3, 330 * u)), y = K ? H * 0.56 : H * 0.5;
       const won = win === t, lost = win && win !== t;
       ellipse(c, x, y, 60 * u, 16 * u, 'rgba(0,0,0,0.4)');
-      drawCharacter(c, portraitDesc(t.cap, 'captain', t.kit, this.t, { face: sd < 0 ? 0.3 : Math.PI - 0.3, expr: won ? 'happy' : lost ? 'hurt' : 'normal', armsUp: won, dance: won, lying: lost, lyingDir: sd }), x, y, 3.4 * u);
-      text(c, String(t.score), x, y + 64 * u, 64 * u, '#fff', 'center', '#000', 8 * u);
-      text(c, t.cap.short.toUpperCase(), x, y + 110 * u, 22 * u, '#fff', 'center', '#000', 4 * u);
-      if (won) drawEmoji(c, '🏆', x, y - 250 * u + Math.sin(this.t * 4) * 8 * u, 70 * u);
+      const cs = K ? 2.2 * u : 3.4 * u;
+      drawCharacter(c, portraitDesc(t.cap, 'captain', t.kit, this.t, { face: sd < 0 ? 0.3 : Math.PI - 0.3, expr: won ? 'happy' : lost ? 'hurt' : 'normal', armsUp: won, dance: won, lying: lost, lyingDir: sd }), x, y, cs);
+      text(c, String(t.score), x, y + (K ? 44 : 64) * u, (K ? 48 : 64) * u, '#fff', 'center', '#000', 8 * u);
+      text(c, t.cap.short.toUpperCase(), x, y + (K ? 80 : 110) * u, (K ? 18 : 22) * u, '#fff', 'center', '#000', 4 * u);
+      if (won) drawEmoji(c, '🏆', x, y - (K ? 170 : 250) * u + Math.sin(this.t * 4) * 8 * u, (K ? 50 : 70) * u);
     }
     const all = R.all;
     const top = (f) => all.reduce((b, p) => (f(p) > f(b) ? p : b), all[0]);
@@ -972,21 +1236,41 @@ const App = {
       ['🎁 ITEM HOARDER', top(p => p.stats.items), p => `${p.stats.items} items used`],
       ['🔥 SHOW-OFF', top(p => p.stats.powers), p => `${p.stats.powers} powers used`],
     ].filter(a => { const v = a[2](a[1]); return !/^0 |^flattened 0x/.test(v); });
-    const aw = Math.min(W - 40, 440 * u), ax = W / 2 - aw / 2, ay = 110 * u;
+    const aw = Math.min(W - 40, (K ? 400 : 440) * u), ax = W / 2 - aw / 2, ay = (K ? 60 : 110) * u;
+    const by = H - (K ? 60 : 94) * u, rs = K ? Math.min(30 * u, (by - ay - 16 * u) / Math.max(1, awards.length + 0.6)) : 30 * u;
     if (awards.length) {
-      this.panel(c, ax, ay, aw, 30 * u + awards.length * 30 * u);
+      this.panel(c, ax, ay, aw, rs * 0.6 + awards.length * rs);
       awards.forEach(([t, p, f], i) => {
-        text(c, t, ax + 14 * u, ay + 26 * u + i * 30 * u, 16 * u, '#ffe066', 'left', '#000', 3);
-        text(c, `${p.name} (${f(p)})`, ax + aw - 14 * u, ay + 26 * u + i * 30 * u, 14 * u, '#fff', 'right', null, 0, FONT_UI);
+        const yy = ay + rs * 0.3 + (i + 0.5) * rs;
+        text(c, t, ax + 14 * u, yy, Math.min(16 * u, rs * 0.55), '#ffe066', 'left', '#000', 3);
+        text(c, `${p.name} (${f(p)})`, ax + aw - 14 * u, yy, Math.min(14 * u, rs * 0.5), '#fff', 'right', null, 0, FONT_UI);
       });
     }
     this.resultItems().forEach(([s, fn], i) => {
-      const bw = Math.min(220 * u, (W - 60) / 3), x = W / 2 + (i - 1) * (bw + 16 * u) - bw / 2, y = H - 94 * u;
-      this.button(c, x, y, bw, 48 * u, s, () => { if (this.resultsT > 0.5) fn(); }, { sel: i === this.resSel, size: 19 * u, selColor: 'rgba(81,207,102,0.5)', hover: () => { this.resSel = i; } });
+      const bw = Math.min((K ? 230 : 220) * u, (W - 60) / 3), x = W / 2 + (i - 1) * (bw + 16 * u) - bw / 2;
+      this.button(c, x, by, bw, (K ? 50 : 48) * u, s, () => { if (this.resultsT > 0.5) fn(); }, { sel: i === this.resSel, size: 19 * u, selColor: 'rgba(46,150,70,0.95)', hover: () => { this.resSel = i; } });
     });
   },
 };
 
+function wrapLines(c, str, maxW) {
+  const words = str.split(' '), out = []; let line = '';
+  for (const w of words) { const t = line ? line + ' ' + w : w; if (c.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+  if (line) out.push(line);
+  return out;
+}
+function wrapFit(c, str, x, y, maxW, size, maxLines, color, align = 'left') {
+  let lines;
+  for (let k = 0; k < 6; k++) {
+    c.font = `700 ${Math.round(size)}px ${FONT_UI}`;
+    lines = wrapLines(c, str, maxW);
+    if (lines.length <= maxLines) break;
+    size *= 0.9;
+  }
+  c.fillStyle = color; c.textAlign = align; c.textBaseline = 'middle';
+  const lh = size * 1.22, y0 = y - (lines.length - 1) * lh / 2;
+  lines.forEach((l, i) => c.fillText(l, x, y0 + i * lh));
+}
 function wrapText(c, str, x, y, maxW, size, color) {
   c.font = `700 ${Math.round(size)}px ${FONT_UI}`; c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'middle';
   const words = str.split(' '); let line = '', ly = y;

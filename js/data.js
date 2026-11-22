@@ -136,14 +136,14 @@ const STADIUMS = [
 ];
 
 const ITEMS = {
-  banana:  { name: 'Plantain Peel',     icon: '🍌', weight: 3, desc: 'Drops behind you. Comedy gold.' },
-  chicken: { name: 'Market Chicken',    icon: '🐔', weight: 3, desc: 'An angry homing chicken.' },
-  bomb:    { name: 'Coconut Bomb',      icon: '🥥', weight: 2, desc: 'Throw it. Run. Hits everyone.' },
-  chili:   { name: 'Scotch Bonnet',     icon: '🌶️', weight: 2, desc: 'Fire feet! Burn past anyone.' },
-  mega:    { name: 'Puff-Puff Power',   icon: '🍩', weight: 2, desc: 'Too much puff-puff. Become ENORMOUS.' },
-  freeze:  { name: 'Harmattan Freeze',  icon: '❄️', weight: 2, desc: 'Freezing Harmattan wind. Rivals turn to ice.' },
-  shrink:  { name: 'Tiny Tonic',        icon: '🧪', weight: 2, desc: 'Rivals go tiny and squeaky.' },
-  bees:    { name: 'Killer Bees',       icon: '🐝', weight: 2, desc: 'African bees. Very angry. Very fast.' },
+  banana:  { name: 'Plantain Peel',     short: 'PEEL', icon: '🍌', weight: 3, desc: 'Drops behind you. Comedy gold.' },
+  chicken: { name: 'Market Chicken',    short: 'CHICKEN', icon: '🐔', weight: 3, desc: 'An angry homing chicken.' },
+  bomb:    { name: 'Coconut Bomb',      short: 'BOMB', icon: '🥥', weight: 2, desc: 'Throw it. Run. Hits everyone.' },
+  chili:   { name: 'Scotch Bonnet',     short: 'CHILLI', icon: '🌶️', weight: 2, desc: 'Fire feet! Burn past anyone.' },
+  mega:    { name: 'Puff-Puff Power',   short: 'PUFF-PUFF', icon: '🍩', weight: 2, desc: 'Too much puff-puff. Become ENORMOUS.' },
+  freeze:  { name: 'Harmattan Freeze',  short: 'FREEZE', icon: '❄️', weight: 2, desc: 'Freezing Harmattan wind. Rivals turn to ice.' },
+  shrink:  { name: 'Tiny Tonic',        short: 'SHRINK', icon: '🧪', weight: 2, desc: 'Rivals go tiny and squeaky.' },
+  bees:    { name: 'Killer Bees',       short: 'BEES', icon: '🐝', weight: 2, desc: 'African bees. Very angry. Very fast.' },
 };
 const ITEM_KEYS = Object.keys(ITEMS);
 
