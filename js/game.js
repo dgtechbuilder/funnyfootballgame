@@ -138,7 +138,7 @@ function resetKickoff(teamIdx) {
 // ---------------------------------------------------------------------------
 //  Particles / text / commentary helpers
 // ---------------------------------------------------------------------------
-function part(o) { if (M.parts.length < 900) M.parts.push(Object.assign({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: 0, life: 1, max: 1, size: 4, color: '#fff', kind: 'dot', rot: 0, vr: 0, drag: 0 }, o)); }
+function part(o) { if (M.parts.length < Perf.q.parts) M.parts.push(Object.assign({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: 0, life: 1, max: 1, size: 4, color: '#fff', kind: 'dot', rot: 0, vr: 0, drag: 0 }, o)); }
 function burst(x, y, z, n, color, speed = 300, kind = 'dot', size = 4, life = 0.6, g = 600) {
   for (let i = 0; i < n; i++) {
     const a = rand(0, TAU), s = rand(0.3, 1) * speed;

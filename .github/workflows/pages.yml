@@ -1,8 +1,11 @@
 name: Deploy to GitHub Pages
 
+# Builds the small, offline-ready site (one minified script + service worker) into dist/
+# and publishes that. Pull requests run the build too, so a broken build never reaches main.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,22 +14,38 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Check the bundle parses
+        run: node -e "new Function(require('fs').readFileSync(require('fs').readdirSync('dist/js').map(f => 'dist/js/' + f)[0], 'utf8'))"
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist
+
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
       - id: deployment
         uses: actions/deploy-pages@v4

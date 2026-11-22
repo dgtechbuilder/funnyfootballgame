@@ -438,6 +438,16 @@ const Input = {
     this.global.mute = Keys.pressed.has('KeyN');
     this.global.music = Keys.pressed.has('KeyM');
   },
+  // forget this frame's one-shot events (presses, releases, menu steps) but keep what is held down
+  clearEdges() {
+    for (const id of this.order) {
+      const d = this.devices[id];
+      for (const b of BTN_NAMES) { d[b].pressed = false; d[b].released = false; }
+      d.navX = 0; d.navY = 0;
+    }
+    for (const k in this.global) this.global[k] = false;
+    Keys.pressed.clear(); Mouse.clicked = false; Mouse.moved = false; Mouse.wheel = 0;
+  },
   endFrame() { Keys.pressed.clear(); Mouse.clicked = false; Mouse.moved = false; Mouse.wheel = 0; },
 
   // menu helpers: aggregate across all devices

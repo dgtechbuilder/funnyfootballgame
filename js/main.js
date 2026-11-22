@@ -30,7 +30,7 @@ const App = {
     const rs = () => {
       const vv = window.visualViewport;
       const w = Math.round(vv ? vv.width : window.innerWidth), h = Math.round(vv ? vv.height : window.innerHeight);
-      this.dpr = Math.min(2, window.devicePixelRatio || 1);
+      this.dpr = Perf.ratio(); // below 1 on the slowest devices: fewer pixels to fill, the browser scales it up
       this.W = Math.max(320, Math.min(w, window.innerWidth || w)); this.H = Math.max(200, Math.min(h, window.innerHeight || h));
       this.cv.style.width = this.W + 'px'; this.cv.style.height = this.H + 'px';
       this.cv.width = Math.round(this.W * this.dpr); this.cv.height = Math.round(this.H * this.dpr);
@@ -49,6 +49,9 @@ const App = {
     if (!CAPTAINS.some(c => c.id === this.cfg.capR)) this.cfg.capR = DEFAULT_CFG.capR;
     if (!STADIUMS.some(s => s.id === this.cfg.stadium)) this.cfg.stadium = DEFAULT_CFG.stadium;
     for (const k of ['gearL', 'gearR']) if (!GEAR[this.cfg[k]]) this.cfg[k] = 'none';
+    Perf.init(this.opts.gfx);
+    Perf.onChange = () => rs();
+    rs();
     Input.rumbleOn = this.opts.rumble !== false;
     VOX.mode = this.opts.pvoice || 'synth';
     Input.onConnect = (d, on) => {
@@ -57,15 +60,29 @@ const App = {
     };
     this.startDemo();
     let last = performance.now();
+    // Fixed-size simulation steps: on a slow device that only manages 12-20 frames a second the game
+    // still runs at real speed (two or three steps per drawn frame) instead of in slow motion, and the
+    // physics never sees a step bigger than it was tuned for. Very long gaps (tab switch) are dropped.
+    const STEP = 0.05, MAX_FRAME = 0.15;
     const frame = now => {
-      const dt = clamp((now - last) / 1000, 0, 0.05); last = now;
-      Input.update(dt);
-      try { this.update(dt); this.render(); } catch (e) { console.error(e); }
+      const raw = Math.max(0, (now - last) / 1000); last = now;
+      Perf.frame(raw);
+      const total = raw > 0.5 ? STEP : Math.min(raw, MAX_FRAME);
+      const n = Math.max(1, Math.ceil(total / STEP - 1e-6)), dt = total / n;
+      Input.update(total);
+      try {
+        for (let i = 0; i < n; i++) {
+          if (i) Input.clearEdges(); // a button press counts once, not once per step
+          this.update(dt);
+        }
+        this.render();
+      } catch (e) { console.error(e); }
       Input.endFrame();
-      SFX.tickCrowd(dt);
+      SFX.tickCrowd(total);
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
+    if (window.Boot) Boot.ready();
   },
   // Put a controller on a team automatically, so nobody ends up 'not playing' by accident.
   autoJoin(id, announce = true) {
@@ -513,17 +530,29 @@ const App = {
     if (!SFX.musicOn) { c.strokeStyle = '#ff6b6b'; c.lineWidth = 3 * u; c.beginPath(); c.moveTo(x + bw + 18 * u, y + 8 * u); c.lineTo(x + 2 * bw - 6 * u, y + bh - 8 * u); c.stroke(); }
     return 2 * bw + 6 * u;
   },
+  // graphics quality: AUTO (follows the frame rate) -> HIGH -> LOW -> AUTO
+  cycleGfx() {
+    const next = { auto: 'high', high: 'low', low: 'auto' }[Perf.mode] || 'auto';
+    Perf.setMode(next); this.opts.gfx = next; this.save(); SFX.ui();
+    this.toast(next === 'low' ? '🖥 Graphics LOW: smoother on slow devices' : next === 'high' ? '🖥 Graphics HIGH: full detail' : '🖥 Graphics AUTO: adjusts to your device', '#9cf');
+  },
+  gfxButton(c, x, y, w, h, size) {
+    const lab = '🖥 ' + (Perf.mode === 'auto' ? 'AUTO' : Perf.q.name);
+    this.button(c, x, y, w, h, lab, () => this.cycleGfx(), { size: Math.min(size, w / (lab.length * 0.62)) });
+  },
   rSoundButtons(c) {
     const u = this.u(), W = this.W, H = this.H;
     if (this.compact()) {
       // top-right when it's free, otherwise bottom-left; never on top of a NEXT / PICK button
       if (['capL', 'capR', 'chars'].includes(this.screen)) return;
       this.soundPair(c, W - 114 * u, 8 * u);
+      if (this.screen === 'title') this.gfxButton(c, W - 210 * u, 8 * u, 90 * u, 36 * u, 13 * u);
       return;
     }
     const y = H - 34 * u, h = 26 * u;
     const showNext = !['title', 'help', 'pads', 'chars'].includes(this.screen);
     const x0 = showNext ? 14 * u : W - 234 * u;
+    if (this.screen === 'title') this.gfxButton(c, x0 - 124 * u, y, 118 * u, h, 12 * u);
     this.button(c, x0, y, 108 * u, h, SFX.muted ? '🔇 SOUND' : '🔊 SOUND', () => SFX.setMuted(!SFX.muted), { size: 12 * u });
     this.button(c, x0 + 114 * u, y, 108 * u, h, SFX.musicOn ? '🎵 MUSIC' : '🎵 OFF', () => SFX.toggleMusic(), { size: 12 * u });
   },
@@ -1053,8 +1082,8 @@ const App = {
       const y = y0 + i * (h + gap);
       this.button(c, W / 2 - w / 2, y, w, h, s, () => { SFX.uiConfirm(); fn(); }, { sel: i === this.pauseSel, size: 22 * u, hover: () => { this.pauseSel = i; } });
     });
-    if (K) this.soundPair(c, W - 114 * u, 8 * u);
-    else this.soundPair(c, W / 2 - 53 * u, H - 92 * u);
+    if (K) { this.soundPair(c, W - 114 * u, 8 * u); this.gfxButton(c, W - 210 * u, 8 * u, 90 * u, 36 * u, 13 * u); }
+    else { this.soundPair(c, W / 2 - 53 * u, H - 92 * u); this.gfxButton(c, W / 2 + 65 * u, H - 92 * u, 120 * u, 36 * u, 14 * u); }
     if (!Touch.active) text(c, 'N: mute    M: music    ESC / START: resume', W / 2, H - (K ? 14 : 40) * u, (K ? 12 : 15) * u, 'rgba(255,255,255,0.7)', 'center', null);
   },
   devTabs(c, cur, y, onPick, s = 1) {
@@ -1282,14 +1311,15 @@ function wrapText(c, str, x, y, maxW, size, color) {
   if (line) c.fillText(line, x, ly);
 }
 
-// Boot once fonts are ready (fall back quickly if offline)
+// Boot once fonts are ready. Don't wait long: from the device cache they are instant, and on a slow
+// first visit it's better to start with a stand-in font (the canvas swaps the real ones in when they land)
 (function boot() {
   let started = false;
   const go = () => { if (!started) { started = true; App.init(); } };
   if (document.fonts && document.fonts.load) {
     Promise.race([
       Promise.all([document.fonts.load('40px "Luckiest Guy"'), document.fonts.load('900 20px "Nunito"')]),
-      new Promise(r => setTimeout(r, 1500)),
+      new Promise(r => setTimeout(r, 400)),
     ]).then(go, go);
   } else go();
 })();
