@@ -255,11 +255,68 @@ function drawCrowd(c, near) {
   }
 }
 
+// Light, cheap grass detail: soft lighter/darker patches, worn goalmouths and centre spot, and a sprinkle
+// of tiny tufts. Positions are generated once per stadium (seeded) and drawn as a handful of flat fills.
+let _grass = null;
+function grassData(S) {
+  if (_grass && _grass.id === S.id) return _grass;
+  let seed = 0; for (const ch of S.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const patches = [];
+  for (let i = 0; i < 34; i++) {
+    const x = rnd() * FW, y = 20 + rnd() * (FH - 40), r = 50 + rnd() * 120, light = rnd() < 0.55;
+    const blobs = [];
+    for (let k = 0; k < 3; k++) blobs.push({ dx: (rnd() - 0.5) * r * 1.1, dy: (rnd() - 0.5) * r * 0.7, r: r * (0.45 + rnd() * 0.45) });
+    patches.push({ x, y, light, a: 0.035 + rnd() * 0.04, blobs });
+  }
+  const tufts = [];
+  for (let i = 0; i < 260; i++) tufts.push({ x: rnd() * FW, y: rnd() * FH, l: rnd() < 0.5 });
+  const sandy = /sahara|savannah|mara/i.test(S.name || '') || S.id === 'sahara';
+  _grass = { id: S.id, patches, tufts, ice: S.id === 'kili', sandy };
+  return _grass;
+}
+function drawGrassDetail(c, S) {
+  const G = grassData(S);
+  const light = G.ice ? 'rgba(255,255,255,' : 'rgba(255,250,200,', dark = G.ice ? 'rgba(60,110,160,' : 'rgba(10,40,0,';
+  for (const p of G.patches) {
+    c.fillStyle = (p.light ? light : dark) + p.a.toFixed(3) + ')';
+    c.beginPath();
+    for (const b of p.blobs) {
+      const x = p.x + b.dx, y = clamp(p.y + b.dy, 0, FH), k = KZ(y);
+      const px = PX(x, y), py = PY(y);
+      if (px < -300 || px > VW + 300) continue;
+      c.moveTo(px + b.r * k, py); c.ellipse(px, py, b.r * k, b.r * k * GT(y), 0, 0, TAU);
+    }
+    c.fill();
+  }
+  // worn turf in the goalmouths and on the centre spot (where everyone stands)
+  c.fillStyle = G.ice ? 'rgba(255,255,255,0.10)' : G.sandy ? 'rgba(120,80,30,0.08)' : 'rgba(170,150,80,0.13)';
+  c.beginPath();
+  for (const [gx, gy, rx] of [[70, FH / 2, 120], [FW - 70, FH / 2, 120], [FW / 2, FH / 2, 70]]) {
+    const k = KZ(gy), px = PX(gx, gy), py = PY(gy);
+    c.moveTo(px + rx * k, py); c.ellipse(px, py, rx * k, rx * 0.55 * k * GT(gy) * 1.6, 0, 0, TAU);
+  }
+  c.fill();
+  // tiny tufts: two batched fills
+  for (const lt of [true, false]) {
+    c.fillStyle = lt ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+    c.beginPath();
+    for (const t of G.tufts) {
+      if (t.l !== lt) continue;
+      const px = PX(t.x, t.y); if (px < -10 || px > VW + 10) continue;
+      const k = KZ(t.y), py = PY(t.y);
+      c.rect(px, py - 3 * k, Math.max(1, 1.6 * k), 3 * k); c.rect(px + 2.4 * k, py - 2.2 * k, Math.max(1, 1.4 * k), 2.2 * k);
+    }
+    c.fill();
+  }
+}
+
 function drawPitch(c) {
   const S = M.stadium;
   const y0 = PY(0), y1 = PY(FH);
   const n = 14, w = FW / n;
   for (let i = 0; i < n; i++) quad(c, [P3(i * w, 0), P3((i + 1) * w + 1, 0), P3((i + 1) * w + 1, FH), P3(i * w, FH)], i % 2 ? S.grassA : S.grassB);
+  drawGrassDetail(c, S);
   // run-off area beyond goal lines
   c.fillStyle = shade(S.grassA, -0.15);
   quad(c, [P3(-GOAL_D - 40, 0), P3(0, 0), P3(0, FH), P3(-GOAL_D - 40, FH)], c.fillStyle);
@@ -621,9 +678,46 @@ function drawParticles(c) {
 // ---------------------------------------------------------------------------
 //  HUD
 // ---------------------------------------------------------------------------
+// the touch player's slot (or null) and their team's next item, used by the on-screen buttons
+function touchHuman() {
+  if (typeof M === 'undefined' || !M || M.demo) return null;
+  for (const t of M.teams) for (const h of t.humans) if (h.dev === 'touch') return h;
+  return null;
+}
+function touchItemKey() {
+  const h = touchHuman();
+  if (!h || !M.cfg.items || M.done) return null;
+  const T = M.teams.find(t => t.humans.includes(h));
+  return T && T.items[0] ? T.items[0] : null;
+}
+function hudU() { return VH < 560 ? Math.min(VW / 1100, VH / 560) : Math.min(VW / 1280, VH / 720) * (VW < 700 ? 1.25 : 1); }
+// "what is this?" card under a human team's item slots: shown for a few seconds after a pickup
+const _itemSeen = [null, null], _itemShowT = [0, 0];
+function drawItemCard(c, t, sd, x, y, w, h, u) {
+  const k = t.items[0], i = t.side;
+  if (k !== _itemSeen[i]) { _itemSeen[i] = k; _itemShowT[i] = k ? M.time : 0; }
+  if (!k || !t.humans.length) return;
+  const it = ITEMS[k], dev = t.humans[0].dev;
+  const key = dev === 'touch' ? 'tap USE' : (Input.glyph(dev, 'item') || (Input.help(dev).item || '').split(' ')[0]);
+  const age = M.time - _itemShowT[i], full = age < 4;
+  const cw = full ? 300 * u : 150 * u, ch = full ? 40 * u : 20 * u;
+  const cx = sd < 0 ? x + 12 * u : x + w - 12 * u - cw, cy = y + h + 64 * u;
+  c.globalAlpha = full ? Math.min(1, age * 5, (4 - age) * 2 + 0.6) : 0.85;
+  c.fillStyle = 'rgba(40,20,70,0.9)'; rrect(c, cx, cy, cw, ch, 8 * u); c.fill();
+  c.strokeStyle = '#b197fc'; c.lineWidth = 2; c.stroke();
+  if (full) {
+    drawEmoji(c, it.icon, cx + 20 * u, cy + ch / 2, 24 * u);
+    text(c, `${it.name.toUpperCase()}  ·  ${key.toUpperCase()} TO USE`, cx + 38 * u, cy + 13 * u, Math.min(13 * u, (cw - 46 * u) / ((it.name.length + key.length + 10) * 0.56)), '#e5dbff', 'left', '#000', 2.5);
+    text(c, it.desc, cx + 38 * u, cy + 29 * u, Math.min(11.5 * u, (cw - 46 * u) / (it.desc.length * 0.48)), '#fff', 'left', null, 0, FONT_UI);
+  } else {
+    const s2 = `${it.icon} ${it.short}: ${key.toUpperCase()}`;
+    text(c, s2, cx + cw / 2, cy + ch / 2 + 1, Math.min(12 * u, cw / (s2.length * 0.55)), '#e5dbff', 'center', '#000', 2.5);
+  }
+  c.globalAlpha = 1;
+}
 function drawHUD(c) {
   if (M.demo) return;
-  const u = Math.min(VW / 1280, VH / 720) * (VW < 700 ? 1.25 : 1);
+  const u = hudU();
   const [A, B] = M.teams;
   // scoreboard
   const w = Math.min(VW - 20, 620 * u), h = 62 * u, x = VW / 2 - w / 2, y = 10 * u;
@@ -660,6 +754,7 @@ function drawHUD(c) {
       const glyph = t.humans.length ? (Input.glyph(t.humans[0].dev, 'ability') || (Input.help(t.humans[0].dev).ability || '').split(' ')[0]) : 'CPU';
       text(c, glyph, ax + 20 * u, ay + 48 * u, 11 * u, ready ? '#ff922b' : '#aaa', 'center', '#000', 3);
     }
+    if (M.cfg.items) drawItemCard(c, t, sd, x, y, w, h, u);
     void cx;
   }
   // clock
@@ -671,7 +766,9 @@ function drawHUD(c) {
 
   // commentary ticker
   if (M.comm.t > 0 && M.comm.text) {
-    const cw = Math.min(VW - 24, 880 * u), chh = 40 * u, cx = VW / 2 - cw / 2, cy = VH - chh - 12 * u - (Touch.active ? VH * 0.0 : 0);
+    // on touch screens keep the ticker in the free strip left of the buttons
+    const freeW = Touch.active ? VW - Touch.layout(VW, VH).w - 24 : VW - 24;
+    const cw = Math.min(freeW, 880 * u), chh = 40 * u, cx = Touch.active ? 12 : VW / 2 - cw / 2, cy = VH - chh - 10 * u;
     c.globalAlpha = Math.min(1, M.comm.t * 2.5);
     c.fillStyle = 'rgba(8,10,28,0.85)'; rrect(c, cx, cy, cw, chh, 12 * u); c.fill();
     c.strokeStyle = '#ffd43b'; c.lineWidth = 2; c.stroke();
@@ -740,7 +837,7 @@ function drawHUD(c) {
     text(c, str, VW / 2, VH * 0.42, 90 * u * sc, t < 1.05 ? '#ffe066' : '#7CFC00', 'center', '#000', 12 * u);
     if (M.golden) text(c, 'GOLDEN GOAL — NEXT GOAL WINS', VW / 2, VH * 0.42 + 70 * u, 26 * u, '#ffd84a', 'center', '#000', 5 * u);
   }
-  if (!M.demo) text(c, 'ESC / P / START: PAUSE', 12 * u, VH - 10 * u, 12 * u, 'rgba(255,255,255,0.45)', 'left', null);
+  if (!M.demo && !Touch.active) text(c, 'ESC / P / START: PAUSE', 12 * u, VH - 10 * u, 12 * u, 'rgba(255,255,255,0.45)', 'left', null);
   if (Touch.active && !M.demo) drawTouchControls(c);
 }
 
@@ -775,19 +872,54 @@ function drawHyperOverlay(c, u) { // 5. hyper strike charge + quick-time event
   c.fillStyle = frac > 0.35 ? '#51cf66' : '#ff6b6b'; c.fillRect(cx - w / 2, cy + 84 * u, w * frac, 8 * u);
   for (let i = 0; i < h.steps.length; i++) circle(c, cx + (i - (h.steps.length - 1) / 2) * 26 * u, cy + 110 * u, 7 * u, i < h.idx ? '#7CFC00' : i === h.idx ? '#ffd43b' : '#555');
 }
+let _touchItemT = 0, _touchItemKey = null;
 function drawTouchControls(c) {
   const L = Touch.layout(VW, VH);
-  c.save(); c.globalAlpha = 0.5;
+  const h = touchHuman(), T = h ? M.teams.find(t => t.humans.includes(h)) : null;
+  c.save();
+  // pause
+  c.globalAlpha = 0.6;
   circle(c, 34, 34, 24, 'rgba(0,0,0,0.5)', '#fff', 2);
   c.fillStyle = '#fff'; c.fillRect(26, 23, 5, 22); c.fillRect(37, 23, 5, 22);
+  // move stick (appears wherever the left thumb lands)
   if (Touch.stick) {
+    c.globalAlpha = 0.5;
     circle(c, Touch.stick.ox, Touch.stick.oy, L.stickR, 'rgba(255,255,255,0.15)', '#fff', 2);
     circle(c, Touch.stick.ox + Touch.stickVec.x * L.stickR, Touch.stick.oy + Touch.stickVec.y * L.stickR, L.stickR * 0.4, 'rgba(255,255,255,0.5)');
-  } else text(c, 'DRAG HERE TO MOVE', VW * 0.18, VH * 0.82, 16, '#fff', 'center', '#000', 3);
+  } else if (!Touch.usedStick) {
+    c.globalAlpha = 0.35 + 0.15 * Math.sin(M.time * 4);
+    const hx = Math.min(VW * 0.2, 160), hy = VH - L.stickR - 24;
+    circle(c, hx, hy, L.stickR, 'rgba(255,255,255,0.08)', '#fff', 2);
+    text(c, 'DRAG TO MOVE', hx, hy, Math.min(15, L.stickR * 0.3), '#fff', 'center', '#000', 3);
+  }
+  // power readiness for the touch player's current player
+  let pFrac = 1;
+  if (h && h.player) { const p = h.player, maxCD = p.role === 'captain' ? POWER_CD : SQUAD_CD; pFrac = clamp(1 - p.abilityCD / maxCD, 0, 1); }
+  const ik = L.btns.item ? L.btns.item.item : null;
+  if (ik !== _touchItemKey) { _touchItemKey = ik; _touchItemT = M.time; }
   for (const n in L.btns) {
     const b = L.btns[n], down = Touch.buttons[n] !== undefined;
-    circle(c, b.x, b.y, b.r * (down ? 0.92 : 1), b.color, '#fff', 3);
-    text(c, b.label, b.x, b.y, b.r * 0.38, '#fff', 'center', '#000', 3);
+    let rr = b.r * (down ? 0.9 : 1);
+    if (n === 'item') rr *= easeOutBack(Math.min(1, (M.time - _touchItemT) / 0.3));
+    const dim = n === 'ability' && pFrac < 1;
+    c.globalAlpha = down ? 0.75 : dim ? 0.3 : 0.5;
+    circle(c, b.x, b.y, rr, b.color);
+    if (n === 'ability' && dim) { // fills up like a clock until the power is ready
+      c.globalAlpha = 0.55; c.fillStyle = b.color;
+      c.beginPath(); c.moveTo(b.x, b.y); c.arc(b.x, b.y, rr, -Math.PI / 2, -Math.PI / 2 + TAU * pFrac); c.closePath(); c.fill();
+    }
+    c.globalAlpha = 0.85; c.strokeStyle = n === 'ability' && !dim ? '#fff3bf' : '#fff'; c.lineWidth = n === 'ability' && !dim ? 3 + Math.abs(Math.sin(M.time * 6)) * 2 : 2.5;
+    c.beginPath(); c.arc(b.x, b.y, rr, 0, TAU); c.stroke();
+    c.globalAlpha = 0.95;
+    if (n === 'item') {
+      const it = ITEMS[b.item];
+      drawEmoji(c, it.icon, b.x, b.y - rr * 0.14, rr * 0.9);
+      text(c, it.short, b.x, b.y + rr * 0.58, Math.min(rr * 0.32, rr * 1.7 / (it.short.length * 0.6)), '#fff', 'center', '#000', 3);
+    } else if (n === 'ability' && T) {
+      const def = h && h.player && h.player.role !== 'captain' ? T.cap.squad : T.cap.signature;
+      drawEmoji(c, def.icon, b.x, b.y - rr * 0.16, rr * 0.7);
+      text(c, b.label, b.x, b.y + rr * 0.55, rr * 0.32, '#fff', 'center', '#000', 3);
+    } else text(c, b.label, b.x, b.y, b.r * (n === 'shoot' ? 0.34 : 0.36), '#fff', 'center', '#000', 3);
   }
   c.restore();
 }

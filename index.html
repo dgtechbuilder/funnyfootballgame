@@ -3,14 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Monate Cup">
+<meta name="theme-color" content="#07091a">
 <title>Monate Cup — Africa's Funniest Football</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #07091a; overflow: hidden; }
-  body { touch-action: none; user-select: none; -webkit-user-select: none; }
-  canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #07091a; overflow: hidden; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  /* sized in JS to the *visible* viewport: 100vh on mobile Safari includes the area hidden behind the toolbar */
+  canvas { display: block; position: absolute; left: 0; top: 0; width: 100%; height: 100%; outline: none; }
 </style>
 </head>
 <body>

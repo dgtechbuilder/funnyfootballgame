@@ -2137,12 +2137,19 @@ function updateCamera(dt) {
   else if (M.phase === 'intro') { tx = FW / 2; ty = FH / 2; }
   // side-on camera: mostly pans along the touchline, only drifts a little in depth
   ty = lerp(FH * 0.55, ty, M.phase === 'cine' ? 0.6 : 0.3);
+  // touch screens: the buttons cover the bottom-right corner, so frame the action a little left of
+  // centre (and let the camera travel further right) so the goal you attack isn't hidden behind them
+  let off = 0;
+  if (typeof Touch !== 'undefined' && Touch.active && !M.demo && M.phase !== 'cine' && M.phase !== 'hyper' && typeof touchHuman === 'function' && touchHuman())
+    off = Touch.layout(VW, VH).w * 0.42 / Math.max(0.05, c.zoom);
+  c.offX = (c.offX || 0) + (off - (c.offX || 0)) * Math.min(1, dt * 3);
+  tx += c.offX;
   const zk = Math.min(1, dt * 3);
   c.zoom += (tz - c.zoom) * zk;
   const halfW = VW / 2 / c.zoom;
   const k = Math.min(1, dt * (M.phase === 'cine' ? 6 : 4.5));
   c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
-  const minX = -GOAL_D - 60 + halfW * 0.8, maxX = FW + GOAL_D + 60 - halfW * 0.8;
+  const minX = -GOAL_D - 60 + halfW * 0.8, maxX = FW + GOAL_D + 60 - halfW * 0.8 + c.offX;
   c.x = minX > maxX ? FW / 2 : clamp(c.x, minX, maxX);
   c.y = clamp(c.y, FH * 0.3, FH * 0.75);
 }

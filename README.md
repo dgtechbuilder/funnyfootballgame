@@ -46,7 +46,9 @@ The game is a static site. Every push to `main` redeploys it to GitHub Pages aut
 | Xbox            | Stick / D-pad  | A             | B / RT       | X / LT               | Y          | LB         | RB         |
 | PlayStation     | Stick / D-pad  | ✕             | ○ / R2       | □ / L2               | △          | L1         | R1         |
 | Switch / 8BitDo | Stick / D-pad  | B             | A / ZR       | Y / ZL               | X          | L          | R          |
-| Touch           | Drag left side | PASS          | SHOOT        | TACKLE               | ITEM       | POWER      | DODGE      |
+| Touch           | Drag left side | PASS          | SHOOT        | TACKLE               | USE (only while carrying an item) | POWER | DODGE |
+
+**Touch screens:** drag anywhere on the left half to run; the buttons sit in the bottom-right corner. The item button only appears while your team is carrying an item, and shows which one (for example 🍌 PEEL). The POWER button fills up like a clock and glows when your power is ready. The camera frames the action slightly left of centre, so the goal you're attacking isn't hidden behind the buttons. Phones in landscape get a compact menu layout with bigger buttons. For a full-screen game on iPhone, use Share → Add to Home Screen.
 
 Other keys:
 
@@ -168,7 +170,7 @@ Success plays a cutscene and an arcing power kick into the net worth **1 goal**.
 
 ### Power-ups
 
-Grab the `?` crates. Each team can hold two items.
+Grab the `?` crates. Each team can hold two items. They show under the scoreboard, and a card pops up for a few seconds saying what you picked up, what it does and which button uses it.
 
 - 🍌 **Plantain Peel:** dropped behind you; whoever steps on it spins out.
 - 🐔 **Market Chicken:** a homing chicken.

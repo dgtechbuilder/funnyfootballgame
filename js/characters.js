@@ -53,14 +53,14 @@ Object.assign(App, {
     const W = this.W, H = this.H, u = this.u();
     this.header(c, 'CHARACTERS', `${CAPTAINS.length} captains from across Africa, each with a squad of three and a keeper. Got a better one? Suggest it!`);
     const items = this.charItems(), sel = items[clamp(this.charSel || 0, 0, items.length - 1)];
-    const narrow = W < 900;
+    const K = this.compact(), narrow = W < 900 && !K; // phones in landscape: side by side, it fits better
     // ---- detail panel
-    const dx = 20 * u, dy = 112 * u, dw = narrow ? W - 40 * u : W * 0.46, dh = narrow ? H * 0.42 : H - dy - 60 * u;
+    const dx = (K ? 10 : 20) * u, dy = (K ? 68 : 112) * u, dw = narrow ? W - 40 * u : W * (K ? 0.5 : 0.46), dh = narrow ? H * 0.42 : H - dy - (K ? 10 : 60) * u;
     this.panel(c, dx, dy, dw, dh, 'rgba(10,12,34,0.9)');
     if (sel.kind === 'add') this.rSuggestPitch(c, dx, dy, dw, dh);
     else this.rCharDetail(c, sel, dx, dy, dw, dh, narrow);
     // ---- tiles
-    const gx = narrow ? 20 * u : dx + dw + 16 * u, gy = narrow ? dy + dh + 12 * u : dy, gw = narrow ? W - 40 * u : W - gx - 20 * u;
+    const gx = narrow ? 20 * u : dx + dw + (K ? 10 : 16) * u, gy = narrow ? dy + dh + 12 * u : dy, gw = narrow ? W - 40 * u : W - gx - (K ? 10 : 20) * u;
     const cols = 4, rows = Math.ceil(items.length / cols), cw = (gw - (cols - 1) * 10 * u) / cols;
     const chh = Math.min(cw * 0.95, ((narrow ? H - gy - 50 * u : dh) - (rows - 1) * 10 * u) / rows);
     items.forEach((it, i) => {
@@ -84,7 +84,8 @@ Object.assign(App, {
       this.hit(x, y, cw, chh, () => { if (this.charSel === i && it.kind === 'add') this.openSuggest(); else { this.charSel = i; SFX.ui(); if (it.kind === 'add') this.openSuggest(); } }, null, 'char:' + i);
     });
     this.navButtons(c, () => this.back('title'), null);
-    this.button(c, W - 214 * u, 14 * u, 200 * u, 42 * u, '💡 SUGGEST ONE', () => this.openSuggest(), { size: 16 * u, color: 'rgba(30,140,60,0.92)' });
+    if (K) this.button(c, W - 178 * u, 8 * u, 170 * u, 38 * u, '💡 SUGGEST ONE', () => this.openSuggest(), { size: 15 * u, color: 'rgba(30,140,60,0.92)' });
+    else this.button(c, W - 214 * u, 14 * u, 200 * u, 42 * u, '💡 SUGGEST ONE', () => this.openSuggest(), { size: 16 * u, color: 'rgba(30,140,60,0.92)' });
   },
   rCharDetail(c, it, x, y, w, h, narrow) {
     const u = this.u(), fan = it.kind === 'fan';
@@ -97,6 +98,7 @@ Object.assign(App, {
     const tx = x + w * 0.4, tw = w * 0.57;
     let ty = y + 26 * u;
     const line = (str, size, col, font = FONT) => {
+      if (ty > y + h - size * 0.8) return; // out of room (small screens): drop the rest
       if (font === FONT_UI && measureW(c, str, size) > tw) { // wrap long sentences instead of shrinking them
         const n = Math.min(3, Math.ceil(measureW(c, str, size) / tw)); wrapText(c, str, tx, ty, tw, size, col); ty += size * 1.3 * n + size * 0.2; return;
       }
