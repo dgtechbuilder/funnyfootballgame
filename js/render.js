@@ -299,14 +299,14 @@ function grassData(S) {
   let seed = 0; for (const ch of S.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const patches = [];
-  for (let i = 0; i < 34; i++) {
+  for (let i = 0; i < Math.round(34 * FW * FH / 1.8e6); i++) {
     const x = rnd() * FW, y = 20 + rnd() * (FH - 40), r = 50 + rnd() * 120, light = rnd() < 0.55;
     const blobs = [];
     for (let k = 0; k < 3; k++) blobs.push({ dx: (rnd() - 0.5) * r * 1.1, dy: (rnd() - 0.5) * r * 0.7, r: r * (0.45 + rnd() * 0.45) });
     patches.push({ x, y, light, a: 0.035 + rnd() * 0.04, blobs });
   }
   const tufts = [];
-  for (let i = 0; i < 260; i++) tufts.push({ x: rnd() * FW, y: rnd() * FH, l: rnd() < 0.5 });
+  for (let i = 0; i < Math.round(260 * FW * FH / 1.8e6); i++) tufts.push({ x: rnd() * FW, y: rnd() * FH, l: rnd() < 0.5 });
   const sandy = /sahara|savannah|mara/i.test(S.name || '') || S.id === 'sahara';
   _grass = { id: S.id, patches, tufts, ice: S.id === 'kili', sandy };
   return _grass;
@@ -359,7 +359,7 @@ function drawPitch(c) {
   quad(c, [P3(FW, 0), P3(FW + GOAL_D + 40, 0), P3(FW + GOAL_D + 40, FH), P3(FW, FH)], c.fillStyle);
   if (S.id === 'kili') { // ice sheen
     c.fillStyle = 'rgba(255,255,255,0.25)';
-    for (let i = 0; i < 6; i++) quad(c, [P3(i * 320 + 40, 0), P3(i * 320 + 120, 0), P3(i * 320 - 60, FH), P3(i * 320 - 140, FH)], c.fillStyle);
+    for (let i = 0; i < Math.ceil(FW / 320) + 1; i++) quad(c, [P3(i * 320 + 40, 0), P3(i * 320 + 120, 0), P3(i * 320 - 60, FH), P3(i * 320 - 140, FH)], c.fillStyle);
   }
   if (S.id === 'afronaut') { // grid glow
     c.strokeStyle = 'rgba(120,255,230,0.08)'; c.lineWidth = 1;
@@ -458,7 +458,7 @@ function drawGoalFront(c, side) {
 
 // ---------------------------------------------------------------------------
 function playerScale(p) {
-  return KZ(p.y) * p.scale * (p.role === 'captain' ? p.team.cap.size * 0.95 : p.role === 'keeper' ? 1.1 : 0.95);
+  return KZ(p.y) * p.scale * CHAR_SCALE * (p.role === 'captain' ? p.team.cap.size * 0.95 : p.role === 'keeper' ? 1.1 : 0.95);
 }
 function drawPlayerEnt(c, p) {
   const x = PX(p.x, p.y, p.z), y = PY(p.y, p.z);
@@ -956,6 +956,10 @@ function drawTouchControls(c) {
       drawEmoji(c, def.icon, b.x, b.y - rr * 0.16, rr * 0.7);
       text(c, b.label, b.x, b.y + rr * 0.55, rr * 0.32, '#fff', 'center', '#000', 3);
     } else text(c, b.label, b.x, b.y, b.r * (n === 'shoot' ? 0.34 : 0.36), '#fff', 'center', '#000', 3);
+    if (n === 'dodge' && Touch.dodge) { // swipe nub: shows which way the dodge goes
+      const dg = Touch.dodge, d = Math.hypot(dg.vx, dg.vy), k = d > 1 ? Math.min(d, rr) / d : 0;
+      c.globalAlpha = 0.8; circle(c, b.x + dg.vx * k, b.y + dg.vy * k, rr * 0.38, 'rgba(255,255,255,0.6)', '#fff', 2);
+    }
   }
   c.restore();
 }

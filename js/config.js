@@ -8,7 +8,7 @@
 //    index.html?mech=-hyper,-gear     -> everything EXCEPT hyper strike and gear
 //  Names: dodge, charge, immobilize, offBall, hyper, gear, chaos, keeperPass
 //
-//  Distances are in game units. The pitch is 1800 units long; 45 units ~ 1 metre.
+//  Distances are in game units. The pitch is 2070 x 1150 units (FW x FH in game.js); 45 units ~ 1 metre.
 // ============================================================================
 
 const MECH = {
@@ -22,6 +22,7 @@ const MECH = {
     perfectRadius: 150,     // an enemy tackle this close and closing in at the moment you press = perfect
     boostMult: 1.3,         // +30% speed after a perfect dodge
     boostTime: 1.5,         // seconds of boost
+    dirBuffer: 0.15,        // DODGE pressed with no direction waits this long for one before sidestepping
   },
 
   // 2. CHARGEABLE TACKLES AND SHOTS (hold time in seconds)

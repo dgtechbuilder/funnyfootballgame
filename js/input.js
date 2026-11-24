@@ -18,7 +18,7 @@ const KB_LAYOUTS = {
     help: { move: 'ARROWS', pass: ', / Num1', shoot: '. / Num2', tackle: '/ / Num3', item: "' / Num0", ability: '; / Num4', dodge: '] / Num5' },
   },
 };
-const PAD_HELP = { move: 'Stick / D-pad', pass: 'A / ✕', shoot: 'B / ○ / RT', tackle: 'X / □ / LT', item: 'Y / △', ability: 'LB / L1', dodge: 'RB / R1' };
+const PAD_HELP = { move: 'Stick / D-pad', pass: 'A / ✕', shoot: 'B / ○ / RT', tackle: 'X / □ / LT', item: 'Y / △', ability: 'LB / L1', dodge: 'R-Stick / RB / R1' };
 const TOUCH_HELP = { move: 'Left thumb', pass: 'PASS', shoot: 'SHOOT', tackle: 'TACKLE', item: 'ITEM', ability: 'POWER', dodge: 'DODGE' };
 const BTN_NAMES = ['pass', 'shoot', 'tackle', 'item', 'ability', 'dodge', 'start'];
 
@@ -84,6 +84,7 @@ window.addEventListener('blur', () => Keys.down.clear());
 const Touch = {
   active: false, stick: null, buttons: {}, // buttons[name] = touchId
   taps: {}, tapPending: null,
+  dodge: null, dodgeFire: null, // the DODGE button's live touch, and a dodge waiting to be read this frame
   stickVec: { x: 0, y: 0 },
   usedStick: false,
   // Buttons sit on two arcs around SHOOT in the bottom-right corner, every one fully on screen.
@@ -135,6 +136,13 @@ function handleTouch(e) {
       Touch.stickVec.x = d > 4 ? dx / Math.max(d, R) : 0; Touch.stickVec.y = d > 4 ? dy / Math.max(d, R) : 0;
       continue;
     }
+    const dg = Touch.dodge;
+    if (dg && dg.id === t.identifier) { // swipe on the DODGE button: dodge the way the thumb slides
+      const dx = p.x - dg.ox, dy = p.y - dg.oy, d = Math.hypot(dx, dy);
+      dg.vx = dx; dg.vy = dy;
+      if (!dg.fired && d > dg.thresh) { dg.fired = true; Touch.dodgeFire = { x: dx / d, y: dy / d }; }
+      continue;
+    }
     let owned = false;
     for (const n in Touch.buttons) if (Touch.buttons[n] === t.identifier) owned = true;
     if (owned) continue;
@@ -143,11 +151,22 @@ function handleTouch(e) {
     if (!inGame) continue;
     let hit = null, best = Infinity;
     for (const n in L.btns) { const b = L.btns[n], d = Math.hypot(p.x - b.x, p.y - b.y) / b.r; if (d < 1.3 && d < best) { best = d; hit = n; } }
-    if (hit) Touch.buttons[hit] = t.identifier;
-    else if (!Touch.stick && p.x < W * 0.55) { Touch.stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y }; Touch.usedStick = true; }
+    if (hit) {
+      Touch.buttons[hit] = t.identifier;
+      if (hit === 'dodge') {
+        // already steering with the move stick: dodge that way at once; otherwise wait for a swipe (or a tap = sidestep)
+        const steering = Touch.stick && Math.hypot(Touch.stickVec.x, Touch.stickVec.y) > 0.25;
+        Touch.dodge = { id: t.identifier, ox: p.x, oy: p.y, vx: 0, vy: 0, thresh: L.btns.dodge.r * 0.45, fired: steering };
+        if (steering) Touch.dodgeFire = { x: 0, y: 0 };
+      }
+    } else if (!Touch.stick && p.x < W * 0.55) { Touch.stick = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y }; Touch.usedStick = true; }
   }
   if (Touch.stick && !ids.has(Touch.stick.id)) { Touch.stick = null; Touch.stickVec.x = Touch.stickVec.y = 0; }
   for (const n in Touch.buttons) if (!ids.has(Touch.buttons[n])) delete Touch.buttons[n];
+  if (Touch.dodge && !ids.has(Touch.dodge.id)) { // let go without swiping: a plain tap dodge
+    if (!Touch.dodge.fired) Touch.dodgeFire = { x: 0, y: 0 };
+    Touch.dodge = null;
+  }
 }
 ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(ev => window.addEventListener(ev, handleTouch, { passive: false }));
 
@@ -271,7 +290,8 @@ function actionLabel(id, action) {
   const d = Input.devices[id], gp = Input.padFor(id);
   if (!gp) return PAD_HELP[action] || '—';
   const bs = padBinds(gp, d.family)[action] || [];
-  const seen = []; for (const b of bs) { const n = describeBind(b, gp, d.family); if (!seen.includes(n)) seen.push(n); }
+  const seen = action === 'dodge' && gp.mapping === 'standard' ? ['R-Stick'] : [];
+  for (const b of bs) { const n = describeBind(b, gp, d.family); if (!seen.includes(n)) seen.push(n); }
   return seen.join(' / ') || '—';
 }
 
@@ -286,7 +306,7 @@ window.addEventListener('contextmenu', e => e.preventDefault());
 // ---------------- unified devices ----------------
 function mkBtn() { return { down: false, pressed: false, released: false }; }
 function mkDev(id, name, short, kind) {
-  const d = { id, name, short, kind, connected: kind === 'kb', mx: 0, my: 0, navX: 0, navY: 0, _nav: { x: 0, y: 0, t: 0 }, lastActive: 0, family: kind === 'pad' ? 'generic' : null, gpId: '', mapping: '' };
+  const d = { id, name, short, kind, connected: kind === 'kb', mx: 0, my: 0, dx: 0, dy: 0, navX: 0, navY: 0, _nav: { x: 0, y: 0, t: 0 }, lastActive: 0, family: kind === 'pad' ? 'generic' : null, gpId: '', mapping: '' };
   BTN_NAMES.forEach(b => d[b] = mkBtn());
   return d;
 }
@@ -363,7 +383,7 @@ const Input = {
       const was = d.connected;
       d.connected = !!(gp && gp.connected);
       if (!d.connected) {
-        d.mx = d.my = 0; BTN_NAMES.forEach(b => this._setBtn(d[b], false));
+        d.mx = d.my = d.dx = d.dy = 0; d.rsLatched = false; BTN_NAMES.forEach(b => this._setBtn(d[b], false));
         if (was && this.onConnect) this.onConnect(d, false);
         continue;
       }
@@ -371,11 +391,11 @@ const Input = {
         d.gpId = gp.id; d.family = padFamily(gp.id);
         // remember resting stick values: devices that report a stuck axis (fake 'gamepads' like some
         // RGB keyboards, headsets or virtual drivers) must not drift the menus
-        d.stuck = [Math.abs(gp.axes[0] || 0) > 0.5, Math.abs(gp.axes[1] || 0) > 0.5];
+        d.stuck = [0, 1, 2, 3].map(a => Math.abs(gp.axes[a] || 0) > 0.5);
         d.name = PAD_FAMILIES[d.family].name; d.short = 'PAD ' + (i + 1);
       }
       if (!was && this.onConnect) this.onConnect(d, true);
-      if (this.capture && this.capture.pad === d.id) { BTN_NAMES.forEach(b => this._setBtn(d[b], false)); d.mx = d.my = 0; continue; }
+      if (this.capture && this.capture.pad === d.id) { BTN_NAMES.forEach(b => this._setBtn(d[b], false)); d.mx = d.my = d.dx = d.dy = 0; continue; }
       const custom = PAD_MAPS[gp.id];
       const B = n => !!(gp.buttons[n] && (gp.buttons[n].pressed || gp.buttons[n].value > 0.5));
       let ax = 0, ay = 0, pass, shoot, tackle, item, ability, dodge, start;
@@ -408,16 +428,29 @@ const Input = {
       const mag = Math.hypot(ax, ay);
       if (mag < 0.22) { ax = 0; ay = 0; } else if (mag > 1) { ax /= mag; ay /= mag; }
       d.mx = ax; d.my = ay;
+      // RIGHT STICK = DODGE: flick it any way to dodge that way (standard layout: axes 2 and 3).
+      // A small hysteresis stops a stick resting near the edge from re-triggering.
+      d.dx = d.dy = 0;
+      let rsDodge = false;
+      const rsTaken = custom && PAD_ACTIONS.some(a => [].concat(custom[a] || []).some(b => b && (b.a === 2 || b.a === 3))); // remapped onto the right stick
+      if (gp.mapping === 'standard' && gp.axes.length >= 4 && !rsTaken) {
+        const rx = d.stuck[2] ? 0 : gp.axes[2] || 0, ry = d.stuck[3] ? 0 : gp.axes[3] || 0, rm = Math.hypot(rx, ry);
+        d.rsLatched = rm > (d.rsLatched ? 0.35 : 0.6);
+        if (d.rsLatched) { d.dx = rx / rm; d.dy = ry / rm; rsDodge = true; }
+      }
       this._setBtn(d.pass, pass); this._setBtn(d.shoot, shoot); this._setBtn(d.tackle, tackle);
-      this._setBtn(d.item, item); this._setBtn(d.ability, ability); this._setBtn(d.dodge, dodge); this._setBtn(d.start, start);
-      if (mag > 0.3 || gp.buttons.some(b => b.pressed)) d.lastActive = this.time;
+      this._setBtn(d.item, item); this._setBtn(d.ability, ability); this._setBtn(d.dodge, dodge || rsDodge); this._setBtn(d.start, start);
+      if (mag > 0.3 || rsDodge || gp.buttons.some(b => b.pressed)) d.lastActive = this.time;
     }
     // touch
     {
       const d = this.devices.touch;
       d.connected = Touch.active;
       d.mx = Touch.stickVec.x; d.my = Touch.stickVec.y;
-      for (const b of BTN_NAMES) this._setBtn(d[b], Touch.buttons[b] !== undefined);
+      // DODGE fires once per touch (see handleTouch): its direction is the swipe, or (0,0) = use the move stick
+      const f = Touch.dodgeFire; Touch.dodgeFire = null;
+      d.dx = f ? f.x : 0; d.dy = f ? f.y : 0;
+      for (const b of BTN_NAMES) this._setBtn(d[b], b === 'dodge' ? !!f : Touch.buttons[b] !== undefined);
       if (Touch.stick || Object.keys(Touch.buttons).length) d.lastActive = this.time;
     }
     // menu navigation edges with key-repeat
