@@ -2,9 +2,12 @@
 //  MATCH SIMULATION: physics, players, AI, keepers, items, hazards, supers
 // ============================================================================
 
-const FW = 1800, FH = 1000;
+// Pitch size and player size. FIELD_SCALE grows the pitch (length and width); CHAR_SCALE shrinks
+// every player (body drawn on screen and collision radius). Goals and the ball keep their size.
+const FIELD_SCALE = 1.15, CHAR_SCALE = 0.85;
+const FW = Math.round(1800 * FIELD_SCALE), FH = Math.round(1000 * FIELD_SCALE);
 const GOAL_W = 270, GY0 = (FH - GOAL_W) / 2, GY1 = (FH + GOAL_W) / 2, GOAL_D = 75, BAR_Z = 105;
-const BALL_R = 11, PR = 20, WALL_H = 46;
+const BALL_R = 11, PR = 20 * CHAR_SCALE, WALL_H = 46;
 const GRAV = 1150;
 const CHARGE_TIME = 0.32, SWEET_TIME = 0.6;
 const FORM = [{ x: 0.58, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.4, y: 0.8 }, { x: 0.22, y: 0.5 }];
@@ -50,7 +53,7 @@ function makePlayer(team, slot, role) {
     charging: false, charge: 0, sweetT: -1,
     tackleCD: 0, jukeCD: 0, invuln: 0, oneTimer: 0, kickAnim: 0, wallCD: 0,
     fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0 },
-    dodgeCD: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
+    dodgeCD: 0, dodgeBuf: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
     abilityCD: rand(2, 5), antic: null, anticCD: rand(4, 9), stretch: 0, stretchCD: rand(5, 10),
     bubble: null, expr: 'normal', exprT: 0, celebrate: false,
     human: null, ai: { t: 0, weave: 0, aimY: 0, chargeTarget: 1, wantSuper: false, sweetRelease: 0.5, wander: 0 },
@@ -346,13 +349,14 @@ function updateHumans(t, dt) {
   }
 }
 
-function blankCmd() { return { mx: 0, my: 0, pass: false, shootDown: false, shootPressed: false, tackle: false, tackleDown: false, dodge: false, item: false, ability: false, aimY: null, passTo: null, faceTo: null }; }
+function blankCmd() { return { mx: 0, my: 0, pass: false, shootDown: false, shootPressed: false, tackle: false, tackleDown: false, dodge: false, dodgeX: 0, dodgeY: 0, item: false, ability: false, aimY: null, passTo: null, faceTo: null }; }
 function humanCmd(dev, p) {
   const c = blankCmd();
   c.mx = dev.mx; c.my = dev.my;
   c.pass = dev.pass.pressed && M.ball.owner === p;
   c.shootDown = dev.shoot.down; c.shootPressed = dev.shoot.pressed;
   c.tackle = dev.tackle.pressed; c.tackleDown = dev.tackle.down; c.dodge = dev.dodge.pressed; c.item = dev.item.pressed; c.ability = dev.ability.pressed;
+  c.dodgeX = dev.dx || 0; c.dodgeY = dev.dy || 0; // right stick flick / touch swipe direction (0,0 = use the move stick)
   c.aimY = Math.abs(dev.my) > 0.3 ? dev.my : 0;
   return c;
 }
@@ -381,7 +385,7 @@ function applyCmd(p, cmd, dt) {
   if (cmd.item && M.cfg.items && p.team.items.length) useItem(p.team, p);
   if (cmd.ability && MECH.hyper.enabled && p.hasOrb && owner) { tryHyper(p); return; } // 5. hyper strike takes over POWER while holding the orb + ball
   if (cmd.ability) { useAbility(p); if (!canAct(p)) return; }
-  if (cmd.dodge && MECH.dodge.enabled && startDodge(p, cmd)) return;                 // 1. timed dodge
+  if (MECH.dodge.enabled && tryDodge(p, cmd, dt)) return;                             // 1. timed dodge
 
   // shooting
   if (owner && cmd.shootPressed && !p.charging) { p.charging = true; p.charge = 0; p.sweetT = -1; p.chargeT = 0; }
@@ -472,11 +476,32 @@ function perfectDodge(p) {
   floatText(p.x, p.y, 105, 'PERFECT DODGE!', '#63e6be', 26); SFX.pickup();
   if (p.human) Input.rumble(p.human, 140, 0.3, 0.8);
 }
+// Which way to dodge: an explicit dodge direction (right stick / touch swipe) wins, then the move stick / keys.
+function dodgeDir(cmd) {
+  if (Math.hypot(cmd.dodgeX || 0, cmd.dodgeY || 0) > 0.2) return Math.atan2(cmd.dodgeY, cmd.dodgeX);
+  if (Math.hypot(cmd.mx, cmd.my) > 0.2) return Math.atan2(cmd.my, cmd.mx);
+  return null;
+}
+// Humans can press DODGE and a direction in either order: a DODGE press with no direction waits a moment
+// for one (keys, stick or swipe) and only then falls back to a sidestep.
+function tryDodge(p, cmd, dt) {
+  if (!p.human) { p.dodgeBuf = 0; return cmd.dodge && startDodge(p, cmd); }
+  if (cmd.dodge && p.dodgeCD <= 0) {
+    if (dodgeDir(cmd) !== null) { p.dodgeBuf = 0; return startDodge(p, cmd); }
+    p.dodgeBuf = MECH.dodge.dirBuffer;
+    return false;
+  }
+  if (p.dodgeBuf > 0) {
+    p.dodgeBuf -= dt;
+    if (dodgeDir(cmd) !== null || p.dodgeBuf <= 0) { p.dodgeBuf = 0; return startDodge(p, cmd); }
+  }
+  return false;
+}
 function startDodge(p, cmd) {
   const C = MECH.dodge;
   if (p.dodgeCD > 0 || !canAct(p)) return false;
-  const m = Math.hypot(cmd.mx, cmd.my);
-  const a = m > 0.2 ? Math.atan2(cmd.my, cmd.mx) : p.face + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
+  const dir = dodgeDir(cmd);
+  const a = dir !== null ? dir : p.face + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
   p.state = 'dodge'; p.stateT = C.dashTime; p.dodgeCD = C.cooldown; p.invuln = Math.max(p.invuln, C.invulnTime);
   p.tCharging = false; p.dodgePerfect = false;
   p.vx = Math.cos(a) * p.speed * C.dashSpeedMult; p.vy = Math.sin(a) * p.speed * C.dashSpeedMult;

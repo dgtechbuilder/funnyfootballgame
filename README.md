@@ -82,10 +82,10 @@ Almost all of the frame cost is filling pixels, so the game adjusts its resoluti
 |-----------------|----------------|---------------|--------------|----------------------|------------|------------|------------|
 | Keyboard 1      | `W A S D`      | `F` / `J`     | `G` / `K` / `Space` | `H` / `L`     | `R` / `I`  | `Q` / `U`  | `E` / `O`  |
 | Keyboard 2      | Arrows         | `,` / Num1    | `.` / Num2   | `/` / Num3           | `'` / Num0 | `;` / Num4 | `]` / Num5 |
-| Xbox            | Stick / D-pad  | A             | B / RT       | X / LT               | Y          | LB         | RB         |
-| PlayStation     | Stick / D-pad  | ✕             | ○ / R2       | □ / L2               | △          | L1         | R1         |
-| Switch / 8BitDo | Stick / D-pad  | B             | A / ZR       | Y / ZL               | X          | L          | R          |
-| Touch           | Drag left side | PASS          | SHOOT        | TACKLE               | USE (only while carrying an item) | POWER | DODGE |
+| Xbox            | Stick / D-pad  | A             | B / RT       | X / LT               | Y          | LB         | Right stick flick / RB |
+| PlayStation     | Stick / D-pad  | ✕             | ○ / R2       | □ / L2               | △          | L1         | Right stick flick / R1 |
+| Switch / 8BitDo | Stick / D-pad  | B             | A / ZR       | Y / ZL               | X          | L          | Right stick flick / R |
+| Touch           | Drag left side | PASS          | SHOOT        | TACKLE               | USE (only while carrying an item) | POWER | DODGE (tap or swipe) |
 
 **Touch screens:** drag anywhere on the left half to run; the buttons sit in the bottom-right corner. The item button only appears while your team is carrying an item, and shows which one (for example 🍌 PEEL). The POWER button fills up like a clock and glows when your power is ready. The camera frames the action slightly left of centre, so the goal you're attacking isn't hidden behind the buttons. Phones in landscape get a compact menu layout with bigger buttons. For a full-screen game on iPhone, use Share → Add to Home Screen.
 
@@ -168,7 +168,12 @@ With your **captain** near the opponent's goal, hold Shoot to full charge. A rin
 - **Perfect tackle:** hold Tackle and release in the green part of the meter. It slides further and hits harder. A quick tap gives a normal tackle.
 - **Off-ball foul:** tackling someone who is more than **5 m from the ball**, and isn't the player a pass is heading to, gives the victim's team a **free item**. If their item slots are already full, it's used straight away. A red **OFF-BALL FOUL!** banner shows who did it and what was given.
 - **Juke:** press Tackle while you have the ball to spin away from defenders.
-- **Dodge:** press DODGE to sidestep (2 s cooldown). Dodge just as an enemy tackle arrives for a **PERFECT DODGE**: +30% speed for 1.5 s. A mistimed dodge still sidesteps but gives no boost.
+- **Dodge:** dodge in any direction (2 s cooldown).
+  - **Controller:** flick the **right stick** the way you want to go (works on controllers the browser reads with the standard layout, which covers Xbox, PlayStation and most modern pads). RB / R1 + the left stick also works.
+  - **Keyboard:** press DODGE and a direction, in either order. Holding a direction while you press DODGE goes that way at once; pressing DODGE first waits 0.15 s for a direction.
+  - **Touch:** tap DODGE while steering with your left thumb to dodge that way, or swipe across the DODGE button to dodge the way you swipe.
+  - With no direction at all you sidestep.
+  - Dodge just as an enemy tackle arrives for a **PERFECT DODGE**: +30% speed for 1.5 s. A mistimed dodge still moves you but gives no boost.
 
 ### Special powers
 

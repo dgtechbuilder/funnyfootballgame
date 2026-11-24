@@ -1160,7 +1160,9 @@ const App = {
       ['🔄', 'PASS / SWITCH', `${L('pass')} passes to the best teammate. Without the ball it switches to the nearest player.`],
       ['🦵', 'TACKLE', `${L('tackle')} slides in.${MECH.charge.enabled ? ' Hold and release in the green zone for a POWER TACKLE.' : ''} Hit the ball carrier, not someone without the ball!`],
       ['🌀', 'JUKE', `${L('tackle')} while you have the ball spins past defenders.`],
-      ...(MECH.dodge.enabled ? [['💨', 'DODGE', `${L('dodge')} sidesteps. Time it just as a tackle arrives for a PERFECT DODGE speed boost.`]] : []),
+      ...(MECH.dodge.enabled ? [['💨', 'DODGE', (id === 'touch' ? 'Tap DODGE while steering, or swipe across DODGE, to dodge any way.'
+        : id.startsWith('pad') ? `Flick the RIGHT STICK any way to dodge that way (or ${L('dodge')} + left stick).`
+        : `${L('dodge')} + a direction (either order) dodges that way.`) + ' Time it just as a tackle arrives for a PERFECT DODGE speed boost.']] : []),
       ['🔥', 'POWER', `${L('ability')} when the meter is full. Captain: ${cap.signature.icon} ${cap.signature.name}. Teammates: ${cap.squad.icon} ${cap.squad.name}.`],
       ['🎁', 'ITEMS', id === 'touch' ? 'Run over ? boxes to grab an item. An ITEM button with the item on it appears: tap it to use it.' : `Run over ? boxes to grab an item (shown under the score), then ${L('item')} to use it.`],
       ...(MECH.hyper.enabled ? [['🔮', 'HYPER STRIKE', `Grab the orb, clear defenders from the box, hold ${L('ability')} and hit the prompts: worth ${MECH.hyper.points} goal${MECH.hyper.points > 1 ? 's' : ''}.`]] : []),
