@@ -113,6 +113,16 @@ const MECH = {
   },
 };
 
+// 🥁 SHOCKWAVE power-up: a blast that throws rivals back, then a force field that keeps them away
+const SHOCKWAVE = {
+  blastRadius: 480,   // rivals this close get thrown back the moment you use it
+  blastPush: 1100,    // throw speed right next to you (fades to about half at the edge)
+  blastDown: 0.9,     // seconds the blasted rivals stay down
+  fieldTime: 3.0,     // seconds the force field lasts after the blast
+  fieldRadius: 230,   // rivals can't get closer than this while the field is up
+  fieldPush: 900,     // how fast the field shoves rivals back out (units per second)
+};
+
 // Gear: multipliers on the existing character stats (speed, power, tackle). 1 = unchanged.
 const GEAR = {
   none:    { name: 'No Gear',          speed: 1,    power: 1,    tackle: 1 },
