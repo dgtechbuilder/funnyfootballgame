@@ -224,6 +224,7 @@ Grab the `?` crates. Each team can hold two items. They show under the scoreboar
 - ❄️ **Harmattan Freeze:** turns nearby rivals to ice.
 - 🧪 **Tiny Tonic:** makes the whole rival team tiny.
 - 🐝 **Killer Bees:** chase down the ball carrier.
+- 🥁 **Talking Drum Shockwave:** a BOOM that throws every nearby rival back and knocks them over, then a glowing force field around you for **3 seconds** that nobody can step into. Rivals can't tackle you or steal the ball while it's up, so you get time to line up a shot, scope a pass or run at goal. The tuning numbers (blast radius, push, field size and time) live in `SHOCKWAVE` in `js/config.js`.
 
 The team that concedes a goal gets an item to help it catch up.
 

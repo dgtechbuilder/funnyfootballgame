@@ -172,6 +172,13 @@ const SFX = {
     this.tone(110, 0.6 * big, 'sine', 0.6, 30);
     this.noise(0.9 * big, 0.6, 'lowpass', 1800, 80);
   },
+  // 🥁 talking-drum shockwave: deep drum hit, pitch-bending boom and an air whoosh
+  shockwave() {
+    this.tone(160, 0.5, 'sine', 0.55, 45);
+    this.tone(320, 0.18, 'triangle', 0.25, 90, 0.02);
+    this.noise(0.7, 0.5, 'lowpass', 2200, 120);
+    this.noise(0.5, 0.18, 'highpass', 1500, 6000, 0.05);
+  },
   moo() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, o = this.ctx.createOscillator(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();

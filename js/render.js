@@ -158,6 +158,11 @@ function renderMatch(c) {
       c.beginPath(); c.ellipse(PX(p.x, p.y), PY(p.y), p.r * KZ(p.y) * 1.4, p.r * KZ(p.y) * 1.4 * GT(p.y), 0, 0, TAU); c.stroke();
     }
     if (p.charging) drawChargeRing(c, p);
+    if (p.fx.wave > 0) { // 🥁 shockwave force field: a pulsing ring on the grass that rivals can't cross
+      const R = SHOCKWAVE.fieldRadius, fade = Math.min(1, p.fx.wave / 0.5), pulse = 0.5 + 0.5 * Math.sin(M.time * 10);
+      groundEllipse(c, p.x, p.y, R, `rgba(255,179,71,${0.1 * fade})`, `rgba(255,179,71,${(0.45 + 0.35 * pulse) * fade})`, 4 * CZ);
+      groundEllipse(c, p.x, p.y, R * (0.55 + 0.45 * ((M.time * 1.6) % 1)), null, `rgba(255,255,255,${0.3 * fade})`, 2 * CZ);
+    }
   }
   for (const bx of M.boxes) groundEllipse(c, bx.x, bx.y, 20 * clamp(1 - bx.z / 900, 0.3, 1), 'rgba(0,0,0,0.3)');
   {

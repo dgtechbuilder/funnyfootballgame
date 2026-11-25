@@ -52,7 +52,7 @@ function makePlayer(team, slot, role) {
     state: 'normal', stateT: 0, anim: rand(0, 10), moving: 0, lyingDir: 1,
     charging: false, charge: 0, sweetT: -1,
     tackleCD: 0, jukeCD: 0, invuln: 0, oneTimer: 0, kickAnim: 0, wallCD: 0,
-    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0 },
+    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0, wave: 0 },
     dodgeCD: 0, dodgeBuf: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
     abilityCD: rand(2, 5), antic: null, anticCD: rand(4, 9), stretch: 0, stretchCD: rand(5, 10),
     bubble: null, expr: 'normal', exprT: 0, celebrate: false,
@@ -121,7 +121,7 @@ function resetKickoff(teamIdx) {
       p.x = t.dir > 0 ? f.x * FW : FW - f.x * FW; p.y = f.y * FH;
       if (p.role === 'keeper') p.x = ownGoalX(t) + t.dir * 45;
       p.vx = p.vy = p.vz = p.z = 0; p.state = 'normal'; p.stateT = 0; p.charging = false; p.charge = 0; p.sweetT = -1;
-      p.face = t.dir > 0 ? 0 : Math.PI; p.celebrate = false; p.armsUp = false; p.hidden = false; p.human = null; p.expr = 'normal'; p.fx.flat = 0;
+      p.face = t.dir > 0 ? 0 : Math.PI; p.celebrate = false; p.armsUp = false; p.hidden = false; p.human = null; p.expr = 'normal'; p.fx.flat = 0; p.fx.wave = 0;
     }
   }
   const kt = M.teams[teamIdx];
@@ -705,6 +705,7 @@ function updatePlayer(p, dt) {
   p.anim += dt;
   p.tackleCD -= dt; p.jukeCD -= dt; p.abilityCD -= dt; p.dodgeCD -= dt; if (p.notReadyT) p.notReadyT = Math.max(0, p.notReadyT - dt); p.stretchCD -= dt; p.stretch = Math.max(0, p.stretch - dt); p.invuln -= dt; p.oneTimer -= dt; p.kickAnim -= dt; p.wallCD -= dt;
   for (const k in p.fx) if (p.fx[k] > 0) p.fx[k] = Math.max(0, p.fx[k] - dt);
+  if (p.fx.wave > 0) shockwaveField(p, dt);
   if (p.bubble) { p.bubble.t -= dt; if (p.bubble.t <= 0) p.bubble = null; }
   const ts = p.fx.mega > 0 ? 1.85 : p.fx.shrink > 0 ? 0.55 : 1;
   p.scale += (ts - p.scale) * Math.min(1, dt * 6);
@@ -822,7 +823,7 @@ function contactInteractions(dt) {
         continue;
       }
       p.hitList.push(v);
-      if (v.fx.mega > 0 || v.fx.fire > 0 || v.fx.shield > 0) {
+      if (v.fx.mega > 0 || v.fx.fire > 0 || v.fx.shield > 0 || v.fx.wave > 0) {
         if (v.fx.shield > 0) { floatText(v.x, v.y, 80, 'LAST PRICE! NO!', '#ffd43b', 24); SFX.boing(); }
         knock(p, -p.vx * 0.6, -p.vy * 0.6, 1.0, 'rebound');
         floatText(p.x, p.y, 60, 'BOING!', '#ffd43b'); SFX.boing();
@@ -866,7 +867,7 @@ function contactInteractions(dt) {
   // body-contact steals
   if (b.owner && b.owner.role !== 'keeper' && b.pickupInv <= 0) {
     const o = b.owner;
-    if (o.invuln <= 0 && o.fx.mega <= 0 && o.fx.fire <= 0) {
+    if (o.invuln <= 0 && o.fx.mega <= 0 && o.fx.fire <= 0 && o.fx.wave <= 0) {
       for (const s of other(o.team).players) {
         if (!canAct(s) || s.fx.shrink > 0) continue;
         const d = dist(s.x, s.y, b.x, b.y);
@@ -1860,6 +1861,7 @@ function teamItemAI(dt) {
       case 'banana': go = b.owner === user || oppNear >= 1; break;
       case 'chili': case 'mega': go = weHave || oppHas; break;
       case 'shrink': go = true; break;
+      case 'wave': go = (weHave && oppNear >= 1) || oppNear >= 3; break;
     }
     if (go || Math.random() < 0.08) useItem(T, b.owner && b.owner.team === T && b.owner.role !== 'keeper' ? b.owner : user);
   }
@@ -1914,6 +1916,49 @@ function useItem(T, p) {
       SFX.buzz();
       break;
     }
+    case 'wave': shockwave(p); break;
+  }
+}
+
+// 🥁 SHOCKWAVE: blast every nearby rival backwards, then hold a force field around the user
+// so nobody can close in, tackle or steal for a few seconds: time to line up a shot or a pass.
+function shockwave(p) {
+  const C = SHOCKWAVE, b = M.ball;
+  let n = 0;
+  for (const r of rivalsNear(p, C.blastRadius)) {
+    const o = r.o, f = C.blastPush * (1 - 0.5 * r.d / C.blastRadius);
+    if (o.fx.mega > 0) { o.vx = r.nx * f * 0.6; o.vy = r.ny * f * 0.6; } // too big to fall over, still shoved
+    else { knock(o, r.nx * f, r.ny * f, C.blastDown, 'shockwave', true); o.vz = 260; }
+    o.tCharging = false; o.tackleCD = Math.max(o.tackleCD, 0.6);
+    n++;
+  }
+  // a loose ball close by is blown away too, unless it's at your own feet
+  if (!b.owner && !b.super) {
+    const dx = b.x - p.x, dy = b.y - p.y, d = Math.hypot(dx, dy) || 1;
+    if (d < C.fieldRadius * 1.6 && d > p.r + 40) { b.vx += dx / d * 600; b.vy += dy / d * 600; b.vz = Math.max(b.vz, 160); }
+  }
+  p.fx.wave = C.fieldTime; p.invuln = Math.max(p.invuln, 0.4);
+  for (let i = 0; i < 3; i++) part({ x: p.x, y: p.y, z: 4, life: 0.45 + i * 0.15, max: 0.45 + i * 0.15, size: C.blastRadius * (0.7 + i * 0.25), color: i === 1 ? '#ffffff' : '#ffb347', kind: 'ring' });
+  burst(p.x, p.y, 20, 26, ['#ffb347', '#ffd43b', '#ffffff'], 520, 'spark', 5, 0.5, 0);
+  burst(p.x, p.y, 5, 10, '#d9c7a0', 300, 'smoke', 14, 0.7, 0);
+  SFX.shockwave(); shake(14); flash(0.25, '#ffd8a8'); M.hitStop = Math.max(M.hitStop || 0, 0.06);
+  if (p.human) Input.rumble(p.human, 300, 1, 0.8);
+  bubble(p, n ? 'GIVE ME SPACE!' : 'BOOM!');
+  floatText(p.x, p.y, 120, n ? `SHOCKWAVE! x${n}` : 'SHOCKWAVE!', '#ffb347', 28);
+}
+// While the field is up, rivals that wander inside it get shoved back out to its edge.
+function shockwaveField(p, dt) {
+  const C = SHOCKWAVE, R = C.fieldRadius;
+  for (const o of other(p.team).players) {
+    if (o.state === 'abducted') continue;
+    const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy) || 1;
+    if (d >= R) continue;
+    const nx = dx / d, ny = dy / d, step = Math.min(R - d, C.fieldPush * dt);
+    o.x = clamp(o.x + nx * step, 20, FW - 20); o.y = clamp(o.y + ny * step, 20, FH - 20);
+    const vin = o.vx * nx + o.vy * ny; // cancel any speed heading inwards
+    if (vin < 0) { o.vx -= vin * nx; o.vy -= vin * ny; }
+    if (o.state === 'tackle') { o.state = 'recover'; o.stateT = 0.35; o.tackleCD = Math.max(o.tackleCD, 0.6); }
+    if (Math.random() < dt * 6) burst(o.x - nx * o.r, o.y - ny * o.r, 25, 2, '#ffb347', 120, 'spark', 4, 0.3, 0);
   }
 }
 
