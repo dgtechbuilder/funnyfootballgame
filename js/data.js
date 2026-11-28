@@ -164,6 +164,7 @@ const ITEMS = {
   freeze:  { name: 'Harmattan Freeze',  short: 'FREEZE', icon: '❄️', weight: 2, desc: 'Freezing Harmattan wind. Rivals turn to ice.' },
   shrink:  { name: 'Tiny Tonic',        short: 'SHRINK', icon: '🧪', weight: 2, desc: 'Rivals go tiny and squeaky.' },
   bees:    { name: 'Killer Bees',       short: 'BEES', icon: '🐝', weight: 2, desc: 'African bees. Very angry. Very fast.' },
+  magnet:  { name: 'Scrapyard Magnet',  short: 'MAGNET', icon: '🧲', weight: 2, desc: 'The ball comes flying to your feet, even off a rival\'s boots. Lasts 5 seconds.' },
   wave:    { name: 'Talking Drum Shockwave', short: 'SHOCKWAVE', icon: '🥁', weight: 2, desc: 'BOOM! Blasts rivals away, then keeps them back for 3 seconds. Nobody can tackle you.' },
 };
 const ITEM_KEYS = Object.keys(ITEMS);
@@ -209,6 +210,7 @@ const COMMENTARY = {
     freeze: ['Harmattan freeze! {o} are now ice sculptures!', 'BRRR! {o} are frozen solid!'],
     shrink: ['Tiny Tonic! {o} have been shrunk! Tiny legs, tiny dreams!', '{o} sound like chipmunks now!'],
     bees: ['KILLER BEES! WHY IS IT ALWAYS BEES?!', 'African bees released! {o} are not happy about it!'],
+    magnet: ['{p} switches on a giant scrapyard magnet! The ball has no choice!', 'MAGNET! The ball is flying to {p} like it owes them money!', 'Is that legal? {p} has a magnet and the ref is checking the rulebook!'],
     wave: ['{p} hits the talking drum! SHOCKWAVE! {o} are blown away!', 'BOOM! {p} clears the area! Nobody can get near them!', 'Talking drum shockwave! {o} are flying like plastic bags!'],
   },
   hazard: {
