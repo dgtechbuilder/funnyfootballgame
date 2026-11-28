@@ -100,7 +100,7 @@ function newMatch(cfg) {
   };
   M.all = [...t0.players, ...t1.players, t0.keeper, t1.keeper];
   M.outfield = [...t0.players, ...t1.players];
-  M.ball = { x: FW / 2, y: FH / 2, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: null, rot: 0, spin: 0, shot: null, passTarget: null, passT: 0, passFrom: null, lockP: null, lockT: 0, super: null, trail: [], keeperIgnore: null, pickupInv: 0 };
+  M.ball = { x: FW / 2, y: FH / 2, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: null, rot: 0, spin: 0, shot: null, passTarget: null, passT: 0, passFrom: null, lockP: null, lockT: 0, super: null, trail: [], keeperIgnore: null, pickupInv: 0, magnetBy: null };
   buildCrowd();
   resetKickoff(M.kickTeam);
   return M;
@@ -114,7 +114,7 @@ function isUp(p) { return p.state !== 'down' && p.state !== 'abducted' && p.stat
 
 function resetKickoff(teamIdx) {
   const b = M.ball;
-  Object.assign(b, { x: FW / 2, y: FH / 2, z: 0, vx: 0, vy: 0, vz: 0, owner: null, shot: null, passTarget: null, super: null, spin: 0, trail: [], keeperIgnore: null, lockP: null });
+  Object.assign(b, { x: FW / 2, y: FH / 2, z: 0, vx: 0, vy: 0, vz: 0, owner: null, shot: null, passTarget: null, super: null, spin: 0, trail: [], keeperIgnore: null, lockP: null, magnetBy: null });
   for (const t of M.teams) {
     for (const p of [...t.players, t.keeper]) {
       const f = p.role === 'keeper' ? { x: 0.025, y: 0.5 } : { x: FORM[p.slot].x * 0.78, y: FORM[p.slot].y };
@@ -887,6 +887,7 @@ function contactInteractions(dt) {
     for (const p of M.outfield) {
       if (!(canAct(p) || p.state === 'tackle')) continue;
       if (b.lockP === p && b.lockT > 0) continue;
+      if (b.magnetBy && b.magnetBy.team !== p.team) continue; // a rival's magnet has it: it flies past you
       const d = dist(p.x, p.y, b.x, b.y);
       if (d < p.r + BALL_R + 5 && d < bd) { bd = d; best = p; }
     }
@@ -1983,11 +1984,15 @@ function shockwave(p) {
 }
 // 🧲 MAGNET: while it's on, a loose ball bends towards the user, and a rival close by
 // gets the ball tugged off their feet. The user can't have the ball stolen ("glued to the boots").
+// The magnet cuts out while its user is knocked down, spun round (Tendai's tag), dancing, frozen and so on,
+// so it can't rob a rival or park the ball beside someone who can't pick it up. A hop, dodge or slide keeps it on.
+function magnetActive(p) { return p.fx.magnet > 0 && (canAct(p) || p.state === 'juke' || p.state === 'dodge' || p.state === 'tackle'); }
 function magnetPull(dt) {
   const C = MAGNET, b = M.ball;
+  b.magnetBy = null;
   if (b.super || b.carried) return;
   for (const p of M.outfield) {
-    if (p.fx.magnet <= 0 || p.state === 'abducted') { p.magnetTug = 0; continue; }
+    if (!magnetActive(p)) { p.magnetTug = 0; continue; }
     const o = b.owner;
     if (o) {
       if (o.team === p.team || o.role === 'keeper' || o.fx.mega > 0 || dist(o.x, o.y, p.x, p.y) > C.yankRadius) { p.magnetTug = 0; continue; }
@@ -1999,7 +2004,7 @@ function magnetPull(dt) {
       b.vx = dx / d * C.pullSpeed * 0.8; b.vy = dy / d * C.pullSpeed * 0.8; b.vz = 140;
       p.magnetTug = 0; o.charging = false; o.charge = 0;
       floatText(o.x, o.y, 80, 'YOINK!', '#74c0fc', 26); bubble(o, pick(['MY BALL!', 'HEY!!', 'THIEF!']));
-      SFX.yank(); excite(0.3);
+      SFX.yank(); excite(0.3); b.magnetBy = p;
       continue;
     }
     p.magnetTug = 0;
@@ -2011,6 +2016,7 @@ function magnetPull(dt) {
     if (b.z > 30) b.vz = Math.min(b.vz, 0);
     if (b.shot && b.shot.team !== p.team) b.shot = null; // a rival's shot that gets bent away is no longer a shot
     if (b.lockP === p) b.lockT = Math.min(b.lockT, 0.15);
+    b.magnetBy = p;
   }
 }
 // While the field is up, rivals that wander inside it get shoved back out to its edge.

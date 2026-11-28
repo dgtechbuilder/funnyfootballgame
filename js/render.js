@@ -163,7 +163,7 @@ function renderMatch(c) {
       groundEllipse(c, p.x, p.y, p.r * 2.2, null, `rgba(255,107,107,${(0.5 + 0.4 * pulse) * fade})`, 3 * CZ);
       groundEllipse(c, p.x, p.y, p.r * (2.9 - 0.6 * ((M.time * 2) % 1)), null, `rgba(116,192,252,${0.6 * fade})`, 2 * CZ);
       const o = b.owner, near = Math.hypot(b.x - p.x, b.y - p.y);
-      const pulling = !b.super && !b.carried && (o ? (o.team !== p.team && o.role !== 'keeper' && near < MAGNET.yankRadius) : near < MAGNET.pullRadius);
+      const pulling = magnetActive(p) && !b.super && !b.carried && (o ? (o.team !== p.team && o.role !== 'keeper' && near < MAGNET.yankRadius) : near < MAGNET.pullRadius);
       if (pulling && near > p.r + BALL_R) {
         c.save(); c.setLineDash([10 * CZ, 8 * CZ]); c.lineDashOffset = -M.time * 160 * CZ;
         c.strokeStyle = `rgba(116,192,252,${0.75 * fade})`; c.lineWidth = 3 * CZ;
