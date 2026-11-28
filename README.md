@@ -7,7 +7,7 @@ Monate Cup is a chaotic, arcade-style football game for 1–6 players that runs 
 - **Teams:** 4 outfield players plus a goalkeeper, led by larger-than-life captains from across Africa.
 - **View:** a low, side-on broadcast camera.
 - **Characters:** chunky Roblox-style avatars built from shaded 3D blocks that turn to face where they run.
-- **No assets:** everything is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords), the vuvuzelas and the players' voices.
+- **Almost no assets:** everything in play is drawn and synthesized in code, including the amapiano soundtrack (log drums, shakers and jazzy piano chords), the vuvuzelas and the players' voices. The only images are two small menu portraits (Amara and Tendai, in `art/`), fetched the first time their menu is shown.
 - **Players talk back:** they yelp "EISH!", "CHAI!" and "HAIBO!" when flattened, shout "E DON ENTER!" and ululate after goals, and sulk "WAHALA..." when they lose. Tackles thump, the net swishes and rattles, keeper gloves smack and the crowd goes "OOOH" at the woodwork.
 - **No build step to play:** just open the page. The published site is bundled and minified automatically.
 - **Built for slow connections and old phones:** about 175 KB on the first visit, then it **plays fully offline** and adjusts its graphics to the device. See [Slow connections and slow devices](#slow-connections-and-slow-devices).
@@ -161,6 +161,8 @@ With your **captain** near the opponent's goal, hold Shoot to full charge. A rin
 | Madame Fatou Ataya | 🇸🇳 Senegal | **Ataya Twister:** a huge curve with a teapot |
 | Sipho Vuvuzela | 🇿🇦 South Africa | **Amapiano Blast:** the keeper can't stop dancing |
 | Ranger Juma | 🇹🇿 Tanzania | **Kilimanjaro Cannon:** fired from a cannon |
+| Little Amara Afropuff | 🇺🇬 Uganda | **Puff Puff Parachute:** floats down from the sky |
+| Tendai "Turbo" Moyo | 🇿🇼 Zimbabwe | **Home Time Hurricane:** zig-zags like a boy late for dinner |
 
 ### Tackles, jukes and dodges
 

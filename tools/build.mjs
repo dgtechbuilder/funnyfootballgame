@@ -7,7 +7,7 @@
 //    (js/app.<hash>.js): one request instead of 13, roughly a quarter of the bytes
 //  * the page loads it with `defer`, so the loading screen paints first
 //  * sw.js gets the version + the list of files to store for offline play
-//  * fonts, icons and the manifest are copied as they are
+//  * fonts, icons, captain menu art and the manifest are copied as they are
 //
 //  Minifying uses esbuild (`npm ci` installs it). Without it the build still
 //  succeeds with a plain (unminified) bundle and says so.
@@ -50,7 +50,7 @@ mkdirSync(join(OUT, 'js'), { recursive: true });
 writeFileSync(join(OUT, bundle), code);
 const page = html.replace(block[0], `<script defer src="${bundle}"></script>`);
 writeFileSync(join(OUT, 'index.html'), page);
-for (const f of ['fonts', 'icons', 'manifest.webmanifest', '.nojekyll']) if (existsSync(join(ROOT, f))) cpSync(join(ROOT, f), join(OUT, f), { recursive: true });
+for (const f of ['fonts', 'icons', 'art', 'manifest.webmanifest', '.nojekyll']) if (existsSync(join(ROOT, f))) cpSync(join(ROOT, f), join(OUT, f), { recursive: true });
 
 // ---- 4. service worker: what to store for offline play, and a version that changes with any of it
 const list = dir => readdirSync(join(OUT, dir)).flatMap(n => statSync(join(OUT, dir, n)).isDirectory() ? list(join(dir, n)) : [join(dir, n).replace(/\\/g, '/')]);
@@ -70,5 +70,5 @@ const gz = f => gzipSync(readFileSync(join(OUT, f)), { level: 9 }).length;
 const firstVisit = precache.filter(f => f !== './');
 console.log(`built ${OUT}  (version ${version})`);
 console.log(`  ${scripts.length} scripts -> ${bundle}: ${kb(Buffer.byteLength(joined))} -> ${kb(code.length)}${minified ? ' minified' : ' (NOT minified)'}, ${kb(gz(bundle))} gzipped`);
-console.log(`  first visit downloads about ${kb(firstVisit.reduce((a, f) => a + (/\.(woff2|png)$/.test(f) ? size(f) : gz(f)), 0))} in ${firstVisit.length} requests, all from this site`);
+console.log(`  first visit downloads about ${kb(firstVisit.reduce((a, f) => a + (/\.(woff2|png|webp)$/.test(f) ? size(f) : gz(f)), 0))} in ${firstVisit.length} requests, all from this site`);
 console.log(`  stored for offline play: ${precache.length} files`);

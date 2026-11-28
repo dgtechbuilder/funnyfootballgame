@@ -88,6 +88,26 @@ const CAPTAINS = [
     blurb: 'Once out-stared a lion. The lion apologised. Kicks the ball like an angry elephant.',
     quips: ['HAKUNA MATATA!', 'TWENDE!', 'POA KABISA!', 'MAMBO!'],
   },
+  {
+    id: 'amara', name: 'Little Amara Afropuff', short: 'Amara', nick: 'The Puff Princess of Kampala', country: 'Uganda', flag: '🇺🇬',
+    team: 'Kampala Kids XI', color: '#f7a24b', alt: '#8a4a12', color2: '#3f5e96', skin: '#8d5236',
+    speed: 1.1, power: 0.9, tackle: 0.9, size: 0.86,
+    superType: 'sky', superName: 'PUFF PUFF PARACHUTE', sidekickHat: 'puffs', art: 'art/amara.webp',
+    signature: { name: 'PUFF BOUNCE', icon: '🎈', desc: 'Boings over the defence on her afro puffs, bonking anyone close.' },
+    squad: { name: 'SKIPPING ROPE', icon: '🪢', desc: 'Trips up the nearest rival. Double dutch!' },
+    blurb: 'Eight years old. Undefeated at skipping, hopscotch and telling the referee he is wrong. Her puffs are bouncier than the ball.',
+    quips: ['MY PUFFS!', 'NOT FAIR!', 'I TOLD YOU!', 'BOING BOING!'],
+  },
+  {
+    id: 'tendai', name: "Tendai 'Turbo' Moyo", short: 'Tendai', nick: 'Late for School Again', country: 'Zimbabwe', flag: '🇿🇼',
+    team: 'Bulawayo Bolts', color: '#1f6fe0', alt: '#0b2f66', color2: '#5f7a3a', skin: '#6b3d25',
+    speed: 1.22, power: 0.92, tackle: 0.95, size: 0.86,
+    superType: 'zigzag', superName: 'HOME TIME HURRICANE', sidekickHat: 'afro', art: 'art/tendai.webp',
+    signature: { name: "TAG, YOU'RE IT!", icon: '🏃', desc: 'Zooms off and tags every rival close by. They spin around looking for him.' },
+    squad: { name: 'RACE YOU!', icon: '👟', desc: 'Playground sprint: a burst of speed and nobody can tackle you.' },
+    blurb: 'Has never once walked anywhere. Runs to school, runs home, runs in his sleep. Mum says sit down. He cannot.',
+    quips: ['RACE YOU!', 'TOO SLOW!', 'CATCH ME!', 'HOME TIME!'],
+  },
 ];
 
 const STADIUMS = [
@@ -224,6 +244,7 @@ const SIDEKICK_NAMES = {
   dayo: ['Tunde', 'Emeka', 'Segun'], kip: ['Wanjiku', 'Otieno', 'Cheruiyot'], ama: ['Akosua', 'Kwabena', 'Abena'],
   hamada: ['Karim', 'Mostafa', 'Youssef'], wahala: ['Ngozi', 'Etienne', 'Test Subject 7'], ataya: ['Moussa', 'Awa', 'Ibrahima'],
   sipho: ['Thabo', 'Lerato', 'Mandla'], juma: ['Baraka', 'Neema', 'Zawadi'],
+  amara: ['Nakato', 'Babirye', 'Mukasa'], tendai: ['Tatenda', 'Rudo', 'Farai'],
 };
 const KEEPER_NAMES = ['Big Hands Bayo', 'The Octopus of Accra', 'Mama\'s Gloves', 'The Wall of Kampala', 'Safe Hands Sibusiso', 'Catch-It Chidi'];
 const KEEPER_ANTICS = [
