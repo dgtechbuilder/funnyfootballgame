@@ -123,6 +123,16 @@ const SHOCKWAVE = {
   fieldPush: 900,     // how fast the field shoves rivals back out (units per second)
 };
 
+// 🧲 MAGNET power-up: the ball is pulled to your feet from across the pitch, and rivals get it yanked off them
+const MAGNET = {
+  time: 5.0,          // seconds the magnet stays switched on
+  pullRadius: 950,    // a loose ball this close gets dragged towards you
+  pullSpeed: 1150,    // how fast the ball flies to you when pulled (units per second)
+  grip: 4.5,          // how quickly the ball bends towards you (higher = snappier)
+  yankRadius: 300,    // a rival with the ball this close gets it pulled off their feet...
+  yankTime: 0.4,      // ...after the magnet tugs on it for this many seconds
+};
+
 // Gear: multipliers on the existing character stats (speed, power, tackle). 1 = unchanged.
 const GEAR = {
   none:    { name: 'No Gear',          speed: 1,    power: 1,    tackle: 1 },
