@@ -260,9 +260,52 @@ const LOOKS = {
       c.strokeStyle = P('#8a6d3b'); c.lineWidth = 1; c.beginPath(); c.ellipse(0, -11, 24, 6, 0, 0, TAU); c.stroke();
     },
   },
+  amara: { // Ugandan playground champion: two big afro puffs with yellow bobbles, denim shorts, red trainers
+    bodyW: 0.9, headR: 15, kid: true, shorts: '#3f5e96', sock: '#f4f4f4', shoe: '#a8321f',
+    behind(c, P, fx, fy, back, t, o) {
+      const bounce = Math.sin(t * 15) * 1.6 * clamp(o.moving, 0, 1);
+      for (const sd of [-1, 1]) afroBlob(c, P('#2a0f14'), P('#3d1820'), sd * 17, -14 - bounce * (sd > 0 ? 1 : -1), 11.5, 9, t + sd);
+    },
+    front(c, P, fx, fy, back, t, o) {
+      hairCap(c, P('#2a0f14'), 9);
+      if (!back) { c.strokeStyle = P('#4a2028'); c.lineWidth = 1; c.beginPath(); c.moveTo(fx * 4, -14); c.lineTo(fx * 4 + 2, -7); c.stroke(); }
+      c.fillStyle = P('#f5c542');
+      for (const sd of [-1, 1]) { c.save(); c.translate(sd * 11, -13); c.rotate(sd * 0.6); rrect(c, -1.8, -4.5, 3.6, 9, 1.8); c.fill(); c.restore(); }
+    },
+  },
+  tendai: { // Zimbabwean schoolboy sprinter: round afro, green shorts, green trainers
+    bodyW: 0.9, headR: 15, kid: true, shorts: '#5f7a3a', sock: '#f4f4f4', shoe: '#3e8a4a',
+    behind(c, P, fx, fy, back, t, o) { afroBlob(c, P('#120a0a'), P('#24140f'), 0, -9, 19.5, 13, t); },
+    front(c, P, fx, fy, back, t, o) {
+      hairCap(c, P('#120a0a'), 7);
+      c.fillStyle = P('#120a0a'); c.beginPath(); c.ellipse(0, -14, 16.5, 6, 0, Math.PI, TAU); c.fill();
+    },
+  },
 };
 
+// Fluffy rounded hair shape (afros and afro puffs): a scalloped ellipse with a soft highlight.
+function afroBlob(c, col, hi, x, y, rx, ry, t) {
+  const n = 11;
+  c.fillStyle = col; c.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU, b = ((i + 0.5) / n) * TAU;
+    c.lineTo(x + Math.cos(a) * rx, y + Math.sin(a) * ry);
+    c.quadraticCurveTo(x + Math.cos(b) * rx * 1.22, y + Math.sin(b) * ry * 1.22, x + Math.cos(a + TAU / n) * rx, y + Math.sin(a + TAU / n) * ry);
+  }
+  c.closePath(); c.fill();
+  c.fillStyle = hi; c.beginPath(); c.ellipse(x - rx * 0.3, y - ry * 0.35, rx * 0.4, ry * 0.3, -0.4, 0, TAU); c.fill();
+}
+
 const SIDEKICK_HATS = {
+  puffs(c, P, fx, fy, back) {
+    for (const sd of [-1, 1]) afroBlob(c, P('#1e0d0d'), P('#33191a'), sd * 15, -13, 8, 6.5, sd);
+    hairCap(c, P('#1e0d0d'), 8);
+    c.fillStyle = P('#f5c542'); for (const sd of [-1, 1]) circle(c, sd * 10.5, -12, 2, P('#f5c542'));
+  },
+  afro(c, P) {
+    hairCap(c, P('#140b0b'), 8);
+    c.fillStyle = P('#140b0b'); c.beginPath(); c.ellipse(0, -13, 16.5, 8, 0, Math.PI, TAU); c.fill();
+  },
   flatcap(c, P, fx, fy, back) {
     hairCap(c, P('#2b2b2b'), 10);
     if (!back) ellipse(c, fx * 8, -10, 11, 3.5, P('#1a1a1a'));
@@ -489,9 +532,9 @@ function drawCharacter(c, o, x, y, s) {
   // ---- palette
   const skin = P(o.skin);
   const bodyCol = P(keeper ? o.kit2 : (look && look.labcoat ? '#f2f2f2' : o.kit));
-  const shorts = P(keeper ? '#222222' : shade(o.kit, -0.45));
-  const sock = P(keeper ? o.kit : o.kit2);
-  const shoe = P(look && look.runner ? '#7CFC00' : '#1b1b1b');
+  const shorts = P(keeper ? '#222222' : look && look.shorts ? look.shorts : shade(o.kit, -0.45));
+  const sock = P(keeper ? o.kit : look && look.sock ? look.sock : o.kit2);
+  const shoe = P(look && look.shoe ? look.shoe : look && look.runner ? '#7CFC00' : '#1b1b1b');
   const armSegs = keeper ? [[0.3, P('#ffffff')], [1, bodyCol]]
     : look && look.labcoat ? [[0.22, skin], [1, bodyCol]]
     : [[0.56, skin], [1, bodyCol]];

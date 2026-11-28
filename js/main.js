@@ -12,6 +12,7 @@ const REMAP_STEPS = [
   ['dodge', 'PRESS: DODGE', 'usually the RIGHT shoulder (RB / R1 / R)'],
   ['start', 'PRESS: PAUSE', 'Start / Menu / Options / +'],
 ];
+const CAP_COLS = 5; // captain-select grid: 10 captains in two rows
 const DEFAULT_CFG = { capL: 'dayo', capR: 'ama', stadium: 'lagos', minutes: 3, difficulty: 'easy', items: true, hazards: true, golden: true, gearL: 'none', gearR: 'none' };
 
 const App = {
@@ -222,7 +223,7 @@ const App = {
   uCap() {
     const key = this.screen === 'capL' ? 'capL' : 'capR';
     let idx = CAPTAINS.findIndex(c => c.id === this.cfg[key]);
-    const cols = 4;
+    const cols = CAP_COLS;
     const nx = Input.navX(), ny = Input.navY();
     if (nx) { idx = (idx + nx + CAPTAINS.length) % CAPTAINS.length; SFX.ui(); }
     if (ny) { idx = (idx + ny * cols + CAPTAINS.length) % CAPTAINS.length; SFX.ui(); }
@@ -864,7 +865,7 @@ const App = {
     const pw1 = `${cap.signature.icon} POWER: ${cap.signature.name} - ${cap.signature.desc}`, pw2 = `${cap.squad.icon} SQUAD: ${cap.squad.name} - ${cap.squad.desc}`;
     text(c, pw1, gx + 16 * u, iy + 158 * u, Math.min(13 * u, (gw - 30 * u) / (pw1.length * 0.52)), '#ffb066', 'left', null, 0, FONT_UI);
     text(c, pw2, gx + 16 * u, iy + 176 * u, Math.min(13 * u, (gw - 30 * u) / (pw2.length * 0.52)), '#9cf', 'left', null, 0, FONT_UI);
-    const cols = 4, cw = (gw - 30 * u) / cols, chh = Math.min(cw * 0.9, (H - iy - 300 * u) / 2);
+    const cols = CAP_COLS, rows = Math.ceil(CAPTAINS.length / cols), cw = (gw - 10 * u * (cols - 1)) / cols, chh = Math.min(cw * 0.9, (H - iy - 300 * u) / rows);
     const gy2 = iy + 200 * u;
     CAPTAINS.forEach((cp, i) => {
       const x = gx + (i % cols) * (cw + 10 * u), y = gy2 + Math.floor(i / cols) * (chh + 10 * u);
@@ -912,7 +913,7 @@ const App = {
     text(c, pw1, gx + 12 * u, iy + 134 * u, Math.min(12 * u, (gw - 24 * u) / (pw1.length * 0.5)), '#ffb066', 'left', null, 0, FONT_UI);
     text(c, pw2, gx + 12 * u, iy + 150 * u, Math.min(12 * u, (gw - 24 * u) / (pw2.length * 0.5)), '#9cf', 'left', null, 0, FONT_UI);
     // grid
-    const cols = 4, rows = Math.ceil(CAPTAINS.length / cols), gap = 8 * u, gy = iy + ih + 8 * u;
+    const cols = CAP_COLS, rows = Math.ceil(CAPTAINS.length / cols), gap = 8 * u, gy = iy + ih + 8 * u;
     const cw = (gw - (cols - 1) * gap) / cols, chh = Math.max(40 * u, (H - gy - 8 * u - (rows - 1) * gap) / rows);
     CAPTAINS.forEach((cp, i) => {
       const x = gx + (i % cols) * (cw + gap), y = gy + Math.floor(i / cols) * (chh + gap);

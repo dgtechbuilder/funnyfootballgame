@@ -1741,6 +1741,20 @@ const POWERS = {
     for (let i = 0; i < 4; i++) M.hazards.push({ type: 'stampede', team: T, kind: pick(['zebra', 'wildebeest', 'zebra', 'wildebeest']), x: x0 - dir * i * 70, y: clamp(p.y + rand(-260, 260), 40, FH - 40), vx: dir * rand(650, 780), ph: rand(0, TAU), hit: [], t: 0 });
     SFX.thud(); SFX.animal('zebra'); shake(10); bubble(p, 'TWENDE!');
   },
+  amara(p) { // puff bounce: a huge hop forward, bonking everyone close on the way up
+    p.vz = 560; p.invuln = 1.1; p.state = 'juke'; p.stateT = 0.6; p.jukeCD = 0.5;
+    p.vx = Math.cos(p.face) * 620; p.vy = Math.sin(p.face) * 620;
+    SFX.boing(); SFX.boing(); burst(p.x, p.y, 10, 14, ['#2a0f14', '#f5c542', '#ffffff'], 220, 'star', 6, 0.5, 0);
+    for (const r of rivalsNear(p, 160)) { knock(r.o, r.nx * 460, r.ny * 460, 0.9, 'puff'); floatText(r.o.x, r.o.y, 70, 'BOING!', '#f5c542', 24); }
+    bubble(p, 'BOING BOING!');
+  },
+  tendai(p) { // tag, you're it: speed burst and every rival close by spins round looking for him
+    p.fx.wind = 1.8; p.invuln = 1.2; SFX.tone(500, 0.35, 'square', 0.1, 1200);
+    let n = 0;
+    for (const r of rivalsNear(p, 300).sort((a, b) => a.d - b.d).slice(0, 3)) { stun(r.o, 'spin', 1.4, pick(["I'M IT?!", 'WHERE DID HE GO?', 'NOT FAIR!'])); n++; }
+    if (!n) floatText(p.x, p.y, 80, 'NOBODY TO TAG!', '#fff', 22);
+    bubble(p, "TAG! YOU'RE IT!");
+  },
 };
 const SQUADS = {
   dayo(p) { p.fx.wind = 1.1; const r = rivalsNear(p, 80)[0]; if (r) knock(r.o, r.nx * 420, r.ny * 420, 0.7, 'barge'); bubble(p, 'OSHOFREE!'); },
@@ -1756,6 +1770,12 @@ const SQUADS = {
   },
   sipho(p) { p.state = 'juke'; p.stateT = 0.45; p.invuln = 0.7; p.jukeCD = 0.5; for (const r of rivalsNear(p, 110)) { stun(r.o, 'dance', 1.3, 'GWARA GWARA!'); r.o.expr = 'happy'; } bubble(p, 'GWARA GWARA!'); },
   juma(p) { SFX.noise(0.7, 0.4, 'lowpass', 500, 120); shake(6); emojiPop(p.x, p.y, 70, '🦁', 1, 30); for (const r of rivalsNear(p, 220)) { stun(r.o, 'panic', 1.4, 'A LION?!'); } },
+  amara(p) {
+    const r = rivalsNear(p, 220).sort((a, b) => a.d - b.d)[0];
+    if (!r) { floatText(p.x, p.y, 80, 'MISSED!', '#fff', 20); return; }
+    knock(r.o, r.nx * 200, r.ny * 200, 1.0, 'trip'); floatText(r.o.x, r.o.y, 70, 'DOUBLE DUTCH!', '#ffb0e0', 22); SFX.slip(); bubble(p, 'SKIP SKIP!');
+  },
+  tendai(p) { p.fx.wind = 1.4; p.invuln = 0.6; bubble(p, 'RACE YOU!'); SFX.tone(700, 0.2, 'square', 0.08, 1100); },
 };
 function useAbility(p) {
   if (p.abilityCD > 0) { if (p.human && !p.notReadyT) { floatText(p.x, p.y, 100, `${Math.ceil(p.abilityCD)}s`, '#aaa', 18, 0.6); p.notReadyT = 0.6; } return false; }
@@ -1784,6 +1804,8 @@ function aiWantsAbility(p) {
     case 'ataya': return rivalsNear(p, 340).length >= 2;
     case 'sipho': return rivalsNear(p, 400, 0.85, true).length >= 2;
     case 'juma': return oppHas || Math.random() < 0.15;
+    case 'amara': return own && rivalsNear(p, 200, 0.9).length >= 1;
+    case 'tendai': return rivalsNear(p, 300).length >= 2 || (oppHas && dist(p.x, p.y, b.owner.x, b.owner.y) < 250);
   }
   switch (id) {
     case 'dayo': case 'kip': return (own && dGoal > 400) || (!b.owner && dist(p.x, p.y, b.x, b.y) > 220);
@@ -1793,6 +1815,8 @@ function aiWantsAbility(p) {
     case 'ataya': return oppHas && dist(p.x, p.y, b.owner.x, b.owner.y) < 280;
     case 'sipho': return own && rivalsNear(p, 105).length >= 1;
     case 'juma': return rivalsNear(p, 210).length >= 2;
+    case 'amara': return oppHas && dist(p.x, p.y, b.owner.x, b.owner.y) < 200;
+    case 'tendai': return (own && dGoal > 400) || (!b.owner && dist(p.x, p.y, b.x, b.y) > 220);
   }
   return false;
 }

@@ -161,6 +161,8 @@ With your **captain** near the opponent's goal, hold Shoot to full charge. A rin
 | Madame Fatou Ataya | 🇸🇳 Senegal | **Ataya Twister:** a huge curve with a teapot |
 | Sipho Vuvuzela | 🇿🇦 South Africa | **Amapiano Blast:** the keeper can't stop dancing |
 | Ranger Juma | 🇹🇿 Tanzania | **Kilimanjaro Cannon:** fired from a cannon |
+| Little Amara Afropuff | 🇺🇬 Uganda | **Puff Puff Parachute:** floats down from the sky |
+| Tendai "Turbo" Moyo | 🇿🇼 Zimbabwe | **Home Time Hurricane:** zig-zags like a boy late for dinner |
 
 ### Tackles, jukes and dodges
 
