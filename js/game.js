@@ -52,7 +52,7 @@ function makePlayer(team, slot, role) {
     state: 'normal', stateT: 0, anim: rand(0, 10), moving: 0, lyingDir: 1,
     charging: false, charge: 0, sweetT: -1,
     tackleCD: 0, jukeCD: 0, invuln: 0, oneTimer: 0, kickAnim: 0, wallCD: 0,
-    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0, wave: 0 },
+    fx: { fire: 0, mega: 0, shrink: 0, soot: 0, zap: 0, snow: 0, flat: 0, wind: 0, shield: 0, boost: 0, mud: 0, wave: 0, magnet: 0 },
     dodgeCD: 0, dodgeBuf: 0, dodgePerfect: false, tCharging: false, tCharge: 0, tacklePerfect: false, chargeT: 0, hasOrb: false,
     abilityCD: rand(2, 5), antic: null, anticCD: rand(4, 9), stretch: 0, stretchCD: rand(5, 10),
     bubble: null, expr: 'normal', exprT: 0, celebrate: false,
@@ -121,7 +121,7 @@ function resetKickoff(teamIdx) {
       p.x = t.dir > 0 ? f.x * FW : FW - f.x * FW; p.y = f.y * FH;
       if (p.role === 'keeper') p.x = ownGoalX(t) + t.dir * 45;
       p.vx = p.vy = p.vz = p.z = 0; p.state = 'normal'; p.stateT = 0; p.charging = false; p.charge = 0; p.sweetT = -1;
-      p.face = t.dir > 0 ? 0 : Math.PI; p.celebrate = false; p.armsUp = false; p.hidden = false; p.human = null; p.expr = 'normal'; p.fx.flat = 0; p.fx.wave = 0;
+      p.face = t.dir > 0 ? 0 : Math.PI; p.celebrate = false; p.armsUp = false; p.hidden = false; p.human = null; p.expr = 'normal'; p.fx.flat = 0; p.fx.wave = 0; p.fx.magnet = 0; p.magnetTug = 0;
     }
   }
   const kt = M.teams[teamIdx];
@@ -288,6 +288,7 @@ function simulate(dt, frozenPlay = false) {
     checkGoal();
     if (M.cfg.items) updateBoxes(dt);
     if (M.cfg.items) teamItemAI(dt);
+    magnetPull(dt);
     if (MECH.hyper.enabled) updateOrb(dt);
   }
   updateProjectiles(dt, frozenPlay);
@@ -327,7 +328,7 @@ function updateHumans(t, dt) {
       let best = null, bd = 1e9;
       for (const hh of t.humans) { if (!hh.player) continue; const d = dist(hh.player.x, hh.player.y, b.owner.x, b.owner.y); if (d < bd) { bd = d; best = hh; } }
       if (best === h) switchTo(h, b.owner);
-    } else if (!teamHas && !keeperHolds && h.cd <= 0 && b.owner !== p && !p.charging) {
+    } else if (!teamHas && !keeperHolds && h.cd <= 0 && b.owner !== p && !p.charging && p.fx.magnet <= 0) { // a magnet user keeps control: the ball is coming to them
       const tgt = b.passTarget && b.passTarget.team === t ? b.passTarget : null;
       if (tgt && !tgt.human) { switchTo(h, tgt); h.cd = 0.5; }
       else {
@@ -867,7 +868,7 @@ function contactInteractions(dt) {
   // body-contact steals
   if (b.owner && b.owner.role !== 'keeper' && b.pickupInv <= 0) {
     const o = b.owner;
-    if (o.invuln <= 0 && o.fx.mega <= 0 && o.fx.fire <= 0 && o.fx.wave <= 0) {
+    if (o.invuln <= 0 && o.fx.mega <= 0 && o.fx.fire <= 0 && o.fx.wave <= 0 && o.fx.magnet <= 0) {
       for (const s of other(o.team).players) {
         if (!canAct(s) || s.fx.shrink > 0) continue;
         const d = dist(s.x, s.y, b.x, b.y);
@@ -1862,6 +1863,7 @@ function teamItemAI(dt) {
       case 'chili': case 'mega': go = weHave || oppHas; break;
       case 'shrink': go = true; break;
       case 'wave': go = (weHave && oppNear >= 1) || oppNear >= 3; break;
+      case 'magnet': go = oppHas || (!b.owner && dist(b.x, b.y, user.x, user.y) > 250); break;
     }
     if (go || Math.random() < 0.08) useItem(T, b.owner && b.owner.team === T && b.owner.role !== 'keeper' ? b.owner : user);
   }
@@ -1917,6 +1919,15 @@ function useItem(T, p) {
       break;
     }
     case 'wave': shockwave(p); break;
+    case 'magnet': {
+      p.fx.magnet = MAGNET.time; p.magnetTug = 0;
+      part({ x: p.x, y: p.y, z: 4, life: 0.5, max: 0.5, size: 260, color: '#ff6b6b', kind: 'ring' });
+      part({ x: p.x, y: p.y, z: 4, life: 0.7, max: 0.7, size: 380, color: '#74c0fc', kind: 'ring' });
+      burst(p.x, p.y, 40, 16, ['#ff6b6b', '#74c0fc', '#e9ecef'], 300, 'spark', 4, 0.5, 0);
+      SFX.magnet(); shake(4);
+      bubble(p, pick(['COME TO PAPA!', 'BALL, COME HOME!', 'IT\'S MAGNETIC!']));
+      break;
+    }
   }
 }
 
@@ -1945,6 +1956,38 @@ function shockwave(p) {
   if (p.human) Input.rumble(p.human, 300, 1, 0.8);
   bubble(p, n ? 'GIVE ME SPACE!' : 'BOOM!');
   floatText(p.x, p.y, 120, n ? `SHOCKWAVE! x${n}` : 'SHOCKWAVE!', '#ffb347', 28);
+}
+// 🧲 MAGNET: while it's on, a loose ball bends towards the user, and a rival close by
+// gets the ball tugged off their feet. The user can't have the ball stolen ("glued to the boots").
+function magnetPull(dt) {
+  const C = MAGNET, b = M.ball;
+  if (b.super || b.carried) return;
+  for (const p of M.outfield) {
+    if (p.fx.magnet <= 0 || p.state === 'abducted') { p.magnetTug = 0; continue; }
+    const o = b.owner;
+    if (o) {
+      if (o.team === p.team || o.role === 'keeper' || o.fx.mega > 0 || dist(o.x, o.y, p.x, p.y) > C.yankRadius) { p.magnetTug = 0; continue; }
+      p.magnetTug = (p.magnetTug || 0) + dt;
+      if (Math.random() < dt * 20) burst(b.x, b.y, 10, 1, ['#ff6b6b', '#74c0fc'], 120, 'spark', 3, 0.25, 0);
+      if (p.magnetTug < C.yankTime) continue;
+      const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
+      b.owner = null; b.lockP = o; b.lockT = 0.6; b.shot = null; b.passTarget = null;
+      b.vx = dx / d * C.pullSpeed * 0.8; b.vy = dy / d * C.pullSpeed * 0.8; b.vz = 140;
+      p.magnetTug = 0; o.charging = false; o.charge = 0;
+      floatText(o.x, o.y, 80, 'YOINK!', '#74c0fc', 26); bubble(o, pick(['MY BALL!', 'HEY!!', 'THIEF!']));
+      SFX.yank(); excite(0.3);
+      continue;
+    }
+    p.magnetTug = 0;
+    const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
+    if (d > C.pullRadius || d < p.r + BALL_R) continue;
+    const sp = d < 120 ? C.pullSpeed * (0.35 + 0.65 * d / 120) : C.pullSpeed; // ease in so it settles at the feet
+    const k = Math.min(1, dt * C.grip);
+    b.vx += (dx / d * sp - b.vx) * k; b.vy += (dy / d * sp - b.vy) * k;
+    if (b.z > 30) b.vz = Math.min(b.vz, 0);
+    if (b.shot && b.shot.team !== p.team) b.shot = null; // a rival's shot that gets bent away is no longer a shot
+    if (b.lockP === p) b.lockT = Math.min(b.lockT, 0.15);
+  }
 }
 // While the field is up, rivals that wander inside it get shoved back out to its edge.
 function shockwaveField(p, dt) {

@@ -224,6 +224,7 @@ Grab the `?` crates. Each team can hold two items. They show under the scoreboar
 - ❄️ **Harmattan Freeze:** turns nearby rivals to ice.
 - 🧪 **Tiny Tonic:** makes the whole rival team tiny.
 - 🐝 **Killer Bees:** chase down the ball carrier.
+- 🧲 **Scrapyard Magnet:** for **5 seconds** the ball is pulled to your feet from across the pitch. A loose ball bends towards you (it can even drag a rival's shot off course), and if a rival is dribbling close to you, the magnet tugs for a moment and then rips the ball off their boots. While it's on, rivals can't pick the ball off your feet (a hard tackle still knocks it loose, but the magnet pulls it straight back). Keepers and giant Puff-Puff players are too heavy to rob. The tuning numbers (time, pull range and speed, yank range) live in `MAGNET` in `js/config.js`.
 - 🥁 **Talking Drum Shockwave:** a BOOM that throws every nearby rival back and knocks them over, then a glowing force field around you for **3 seconds** that nobody can step into. Rivals can't tackle you or steal the ball while it's up, so you get time to line up a shot, scope a pass or run at goal. The tuning numbers (blast radius, push, field size and time) live in `SHOCKWAVE` in `js/config.js`.
 
 The team that concedes a goal gets an item to help it catch up.

@@ -179,6 +179,17 @@ const SFX = {
     this.noise(0.7, 0.5, 'lowpass', 2200, 120);
     this.noise(0.5, 0.18, 'highpass', 1500, 6000, 0.05);
   },
+  // 🧲 magnet: a rising electric hum with a metallic clang
+  magnet() {
+    this.tone(90, 0.7, 'sawtooth', 0.12, 260);
+    this.tone(180, 0.7, 'square', 0.05, 520, 0.05);
+    this.tone(1250, 0.25, 'triangle', 0.18, 900, 0.02);
+  },
+  // the ball gets ripped off a rival's feet
+  yank() {
+    this.tone(300, 0.18, 'square', 0.14, 1400);
+    this.noise(0.25, 0.2, 'bandpass', 900, 3500);
+  },
   moo() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, o = this.ctx.createOscillator(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
