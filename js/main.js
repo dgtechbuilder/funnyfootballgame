@@ -842,8 +842,10 @@ const App = {
     const ps = (narrow ? 3.0 : 4.2) * u;
     ellipse(c, px, py, 70 * ps / 2.2, 18 * ps / 2.2, 'rgba(0,0,0,0.4)');
     const pk = left ? cap.color : (this.cfg.capL === cap.id || colorDist(CAPTAINS.find(x => x.id === this.cfg.capL).color, cap.color) < 110 ? cap.alt : cap.color);
-    drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, py, ps);
+    const art = !!cap.art; // captains with menu art: sidekicks behind, picture in front
+    if (!art) drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, py, ps);
     for (let i = 0; i < 2; i++) drawCharacter(c, portraitDesc(cap, 'sidekick', pk, this.t + i, { face: left ? 0.2 : Math.PI - 0.2, expr: 'normal', moving: 0.5 }), px + (i ? 1 : -1) * 70 * ps / 2, py - 6 * u, ps * 0.48);
+    if (art && !drawCapArt(c, cap, px, py + 4 * ps, 76 * ps, this.t, !left)) drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: 'happy' }), px, py, ps);
     if (!narrow) {
       text(c, cap.name.toUpperCase(), px, py + 40 * u, Math.min(30 * u, W * 0.4 / (cap.name.length * 0.62)), '#fff', 'center', '#000', 5 * u);
       text(c, `"${cap.nick}"  ·  ${cap.country.toUpperCase()}`, px, py + 70 * u, 16 * u, '#ffe066', 'center', '#000', 3 * u);
@@ -892,7 +894,7 @@ const App = {
     ellipse(c, px, feet, 70 * ps / 2.2, 18 * ps / 2.2, 'rgba(0,0,0,0.4)');
     const pk = left ? cap.color : (this.cfg.capL === cap.id || colorDist(CAPTAINS.find(x => x.id === this.cfg.capL).color, cap.color) < 110 ? cap.alt : cap.color);
     for (let i = 0; i < 2; i++) drawCharacter(c, portraitDesc(cap, 'sidekick', pk, this.t + i, { face: left ? 0.2 : Math.PI - 0.2, expr: 'normal', moving: 0.5 }), px + (i ? 1 : -1) * 66 * ps / 2, feet - 6 * u, ps * 0.48);
-    drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, feet, ps);
+    if (!drawCapArt(c, cap, px, feet + 4 * ps, 84 * ps, this.t, !left)) drawCharacter(c, portraitDesc(cap, 'captain', pk, this.t, { face: left ? 0.35 : Math.PI - 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, feet, ps);
     text(c, cap.name.toUpperCase(), px, feet + 20 * u, Math.min(20 * u, (lw - 10 * u) / (cap.name.length * 0.58)), '#fff', 'center', '#000', 4 * u);
     text(c, `"${cap.nick}"  ·  ${cap.country.toUpperCase()}`, px, feet + 42 * u, Math.min(13 * u, (lw - 10 * u) / ((cap.nick.length + cap.country.length + 6) * 0.55)), '#ffe066', 'center', '#000', 2.5 * u);
     this.button(c, px - 85 * u, H - 54 * u, 170 * u, 46 * u, 'PICK  ▶', () => this.pickCaptain(), { size: 20 * u, color: 'rgba(30,140,60,0.92)' });

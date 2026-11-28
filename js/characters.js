@@ -98,7 +98,7 @@ Object.assign(App, {
     const ps = Math.min(h * (narrow ? 0.62 : 0.5) / 86, w * 0.34 / 52);
     const px = x + w * 0.2, py = y + h * (narrow ? 0.86 : 0.68);
     ellipse(c, px, py, 70 * ps / 2.2, 18 * ps / 2.2, 'rgba(0,0,0,0.4)');
-    drawCharacter(c, portraitDesc(cap, 'captain', cap.color, this.t, { face: 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, py, ps);
+    if (fan || !drawCapArt(c, cap, px, py + 4 * ps, 100 * ps, this.t, false)) drawCharacter(c, portraitDesc(cap, 'captain', cap.color, this.t, { face: 0.35, moving: 0.4, expr: Math.sin(this.t * 1.3) > 0.7 ? 'grit' : 'happy' }), px, py, ps);
     const tx = x + w * 0.4, tw = w * 0.57;
     let ty = y + 26 * u;
     const line = (str, size, col, font = FONT) => {

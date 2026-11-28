@@ -283,6 +283,22 @@ const LOOKS = {
   },
 };
 
+// Menu portrait art (captains with an `art` image): loaded on first use, drawn standing on
+// (x, feet), h tall, mirrored to face left for the right-hand team. Returns false until loaded,
+// so callers fall back to the block character.
+const _capArt = {};
+function drawCapArt(c, cap, x, feet, h, t, flip) {
+  if (!cap.art) return false;
+  let im = _capArt[cap.id];
+  if (!im) { im = _capArt[cap.id] = new Image(); im.src = cap.art; }
+  if (!im.complete || !im.naturalWidth) return false;
+  const w = h * im.naturalWidth / im.naturalHeight, bob = Math.abs(Math.sin(t * 3)) * h * 0.015;
+  c.save(); c.translate(x, feet - bob); if (flip) c.scale(-1, 1);
+  c.drawImage(im, -w / 2, -h, w, h);
+  c.restore();
+  return true;
+}
+
 // Fluffy rounded hair shape (afros and afro puffs): a scalloped ellipse with a soft highlight.
 function afroBlob(c, col, hi, x, y, rx, ry, t) {
   const n = 11;
